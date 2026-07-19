@@ -2759,7 +2759,7 @@ private struct OnTrackPressButtonStyle: ButtonStyle {
 }
 
 private enum OnTrackFont {
-    static let accessory = Font.subheadline.weight(.semibold)
+    static let accessory = Font.body.weight(.semibold)
     static let action = Font.body.weight(.semibold)
     static let body = Font.body
     static let caption = Font.caption
@@ -2768,10 +2768,10 @@ private enum OnTrackFont {
     static let control = Font.body.weight(.semibold)
     static let icon = Font.title3.weight(.semibold)
     static let label = Font.caption.weight(.medium)
-    static let metadata = Font.subheadline
+    static let metadata = Font.body
     static let routeGlyph = Font.caption.weight(.bold)
     static let symbol = Font.body.weight(.semibold)
-    static let time = Font.subheadline.weight(.bold)
+    static let time = Font.body.weight(.bold)
     static let title = Font.headline
 }
 
