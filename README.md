@@ -89,6 +89,14 @@ Run the iOS app on a connected device:
 bun run ios
 ```
 
+Build, open, install, and launch the iOS app in an available simulator:
+
+```sh
+bun run simulator
+```
+
+To compile the iOS app without opening a simulator, run `bun run ios:build`.
+
 To point iOS scripts at another backend, set `IOS_API_ORIGIN`:
 
 ```sh
