@@ -898,7 +898,7 @@ private struct TimeSelectorView: View {
                     .foregroundStyle(OnTrackTheme.text)
 
                 Image(systemName: "chevron.down")
-                    .font(OnTrackFont.chevron)
+                    .font(OnTrackFont.compactSymbol)
                     .foregroundStyle(OnTrackTheme.dimText)
             }
             .padding(.horizontal, OnTrackTheme.space4)
@@ -1047,7 +1047,7 @@ private struct TimeEditorSheet: View {
                     draft = .current(mode: .now)
                 } label: {
                     Image(systemName: "clock.arrow.trianglehead.2.counterclockwise.rotate.90")
-                        .font(OnTrackFont.icon)
+                        .font(OnTrackFont.symbol)
                         .foregroundStyle(isNowSelected ? OnTrackTheme.primary : OnTrackTheme.dimText)
                         .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                 }
@@ -1061,7 +1061,7 @@ private struct TimeEditorSheet: View {
                     draft.date = Self.lastTrainDate(for: draft.date)
                 } label: {
                     Image(systemName: "moon")
-                        .font(OnTrackFont.icon)
+                        .font(OnTrackFont.symbol)
                         .foregroundStyle(isLastTrainSelected ? OnTrackTheme.primary : OnTrackTheme.dimText)
                         .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                 }
@@ -1093,7 +1093,7 @@ private struct TimeEditorSheet: View {
         Group {
             if draft.mode == .lastTrain {
                 Text(AppText.queryTodayLastTrain)
-                    .font(OnTrackFont.title)
+                    .font(OnTrackFont.control)
                     .foregroundStyle(OnTrackTheme.text)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
@@ -1119,7 +1119,7 @@ private struct TimeEditorSheet: View {
                 Button(AppText.cancel) {
                     dismiss()
                 }
-                .font(OnTrackFont.action)
+                .font(OnTrackFont.control)
                 .foregroundStyle(OnTrackTheme.text)
                 .frame(maxWidth: .infinity)
                 .frame(height: Self.footerButtonHeight)
@@ -1132,7 +1132,7 @@ private struct TimeEditorSheet: View {
                     selection = draft.mode == .now ? .current(mode: .now) : draft
                     dismiss()
                 }
-                .font(OnTrackFont.action)
+                .font(OnTrackFont.control)
                 .foregroundStyle(OnTrackTheme.primary)
                 .frame(maxWidth: .infinity)
                 .frame(height: Self.footerButtonHeight)
@@ -1370,7 +1370,7 @@ private struct RouteGlyph: View {
                     .frame(width: OnTrackTheme.space2, height: OnTrackTheme.space2)
             case .destination:
                 Image(systemName: "flag")
-                    .font(OnTrackFont.routeGlyph)
+                    .font(OnTrackFont.compactSymbol)
                     .foregroundStyle(color)
             }
         }
@@ -1459,7 +1459,7 @@ private struct TrainCard: View {
                     Text(TrainDisplay.price(train.price) ?? "")
                         .frame(alignment: .trailing)
                 }
-                .font(OnTrackFont.metadata.weight(.medium))
+                .font(OnTrackFont.control)
                 .foregroundStyle(OnTrackTheme.dimText)
                 .monospacedDigit()
                 .lineLimit(1)
@@ -1728,7 +1728,7 @@ private struct StationSearchView: View {
         VStack(spacing: 0) {
             ZStack {
                 Text(title)
-                    .font(OnTrackFont.title)
+                    .font(OnTrackFont.control)
                     .foregroundStyle(OnTrackTheme.text)
                     .lineLimit(1)
 
@@ -1751,7 +1751,7 @@ private struct StationSearchView: View {
             VStack(spacing: 0) {
                 HStack(spacing: OnTrackTheme.space3) {
                     Image(systemName: "magnifyingglass")
-                        .font(OnTrackFont.icon)
+                        .font(OnTrackFont.symbol)
                         .foregroundStyle(OnTrackTheme.dimText)
                         .frame(width: 24)
 
@@ -2028,7 +2028,7 @@ private struct TrainBoardingPanel: View {
 
             ShareLink(item: message ?? "") {
                 Image(systemName: "square.and.arrow.up")
-                    .font(OnTrackFont.icon)
+                    .font(OnTrackFont.symbol)
                     .foregroundStyle(message == nil ? OnTrackTheme.dimText : OnTrackTheme.primary)
                     .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
                     .contentShape(Rectangle())
@@ -2060,7 +2060,7 @@ private struct TrainBoardingPanel: View {
 
     private func panelSectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(OnTrackFont.sectionHeader)
+            .font(OnTrackFont.control)
             .foregroundStyle(OnTrackTheme.dimText)
     }
 
@@ -2207,7 +2207,7 @@ private struct SettingsSheet: View {
         VStack(spacing: 0) {
             HStack {
                 Text(AppText.settings)
-                    .font(OnTrackFont.title)
+                    .font(OnTrackFont.control)
                     .foregroundStyle(OnTrackTheme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -2624,7 +2624,7 @@ private struct SettingsLinkRow: View {
                 Spacer()
 
                 Image(systemName: "arrow.up.right")
-                    .font(OnTrackFont.accessory)
+                    .font(OnTrackFont.symbol)
                     .foregroundStyle(OnTrackTheme.dimText)
             }
             .padding(.horizontal, OnTrackTheme.space4)
@@ -2660,7 +2660,7 @@ private struct IconPlainButton: View {
                         .tint(OnTrackTheme.dimText)
                 } else {
                     Image(systemName: systemName)
-                        .font(OnTrackFont.icon)
+                        .font(OnTrackFont.symbol)
                         .foregroundStyle(OnTrackTheme.dimText)
                 }
             }
@@ -2682,7 +2682,7 @@ private struct IconSquare: View {
                     .tint(OnTrackTheme.dimText)
             } else {
                 Image(systemName: systemName)
-                    .font(OnTrackFont.icon)
+                    .font(OnTrackFont.symbol)
                     .foregroundStyle(OnTrackTheme.dimText)
             }
         }
@@ -2697,7 +2697,7 @@ private struct PanelActionIcon: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(OnTrackFont.icon)
+            .font(OnTrackFont.symbol)
             .foregroundStyle(color)
             .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
             .contentShape(Rectangle())
@@ -2756,21 +2756,14 @@ private enum OnTrackFont {
     private static let compact = Font.system(size: 12)
     private static let standard = Font.system(size: 18)
 
-    static let accessory = standard.weight(.semibold)
-    static let action = standard.weight(.semibold)
     static let body = standard
     static let caption = compact
     static let captionStrong = compact.weight(.bold)
-    static let chevron = compact.weight(.bold)
+    static let compactSymbol = compact.weight(.bold)
     static let control = standard.weight(.semibold)
-    static let icon = standard.weight(.semibold)
     static let label = compact.weight(.medium)
-    static let metadata = standard
-    static let routeGlyph = compact.weight(.bold)
-    static let sectionHeader = standard.weight(.semibold)
     static let symbol = standard.weight(.semibold)
     static let time = standard.weight(.bold)
-    static let title = standard.weight(.semibold)
 }
 
 private extension View {
