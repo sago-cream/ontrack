@@ -1457,7 +1457,6 @@ private struct TrainCard: View {
                         .lineLimit(1)
 
                     Text(TrainDisplay.price(train.price) ?? "")
-                        .font(OnTrackFont.caption)
                         .frame(alignment: .trailing)
                 }
                 .font(OnTrackFont.metadata.weight(.medium))
@@ -2768,7 +2767,7 @@ private enum OnTrackFont {
     static let label = compact.weight(.medium)
     static let metadata = standard
     static let routeGlyph = compact.weight(.bold)
-    static let sectionHeader = compact.weight(.semibold)
+    static let sectionHeader = standard.weight(.semibold)
     static let symbol = standard.weight(.semibold)
     static let time = standard.weight(.bold)
     static let title = standard.weight(.semibold)
