@@ -93,8 +93,4 @@ else
     xcrun simctl launch --terminate-running-process "$DEVICE_ID" "$IOS_BUNDLE_ID_VALUE"
 fi
 
-if [[ "${IOS_SKIP_OPEN:-0}" != "1" ]]; then
-    open -a Simulator
-fi
-
 echo "Updated and launched $IOS_BUNDLE_ID_VALUE on simulator $DEVICE_ID."
