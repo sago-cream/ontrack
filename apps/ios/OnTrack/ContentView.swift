@@ -1437,32 +1437,27 @@ private struct TrainCard: View {
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: TrainPanelLayout.rowGap) {
-                HStack(spacing: OnTrackTheme.space2) {
-                    timeCluster
+                timeCluster
+                    .frame(maxWidth: .infinity)
+                    .frame(height: TrainPanelLayout.topRowHeight)
 
-                    Spacer(minLength: OnTrackTheme.space2)
+                HStack(spacing: OnTrackTheme.space2) {
+                    HStack(spacing: OnTrackTheme.space1) {
+                        trainIdentifier
+
+                        if let tripLine = TrainDisplay.tripLine(train.tripLine) {
+                            Text("•")
+                                .accessibilityHidden(true)
+
+                            Text(tripLine)
+                        }
+                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(1)
 
                     Text(TrainDisplay.price(train.price) ?? "")
                         .font(OnTrackFont.caption)
-                        .foregroundStyle(OnTrackTheme.dimText)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .frame(
-                            width: TrainPanelLayout.detailColumnWidth,
-                            alignment: .trailing
-                        )
-                }
-                .frame(height: TrainPanelLayout.topRowHeight)
-
-                HStack(spacing: OnTrackTheme.space2) {
-                    trainIdentifier
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(TrainDisplay.tripLine(train.tripLine) ?? "")
-                        .frame(
-                            width: TrainPanelLayout.detailColumnWidth,
-                            alignment: .trailing
-                        )
+                        .frame(alignment: .trailing)
                 }
                 .font(OnTrackFont.metadata.weight(.medium))
                 .foregroundStyle(OnTrackTheme.dimText)
@@ -1552,7 +1547,7 @@ private struct TripSeparator: View {
 
             separatorLine
         }
-        .frame(width: TrainPanelLayout.tripSeparatorWidth)
+        .frame(minWidth: TrainPanelLayout.tripSeparatorWidth, maxWidth: .infinity)
     }
 
     private var separatorLine: some View {
@@ -1893,7 +1888,6 @@ private enum TrainPanelLayout {
     static let topRowHeight = OnTrackTheme.space6
     static let bottomRowHeight = OnTrackTheme.space6
     static let rowGap = OnTrackTheme.space1 / 2
-    static let detailColumnWidth = OnTrackTheme.space6 * 4
     static let timeColumnWidth = OnTrackTheme.space6 * 2 + OnTrackTheme.space2
     static let tripSeparatorWidth = OnTrackTheme.space6 * 2 + OnTrackTheme.space5
     static let delayTextOffset = OnTrackTheme.space3 + 2
