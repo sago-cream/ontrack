@@ -2066,7 +2066,7 @@ private struct TrainBoardingPanel: View {
 
     private func panelSectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(OnTrackFont.control)
+            .font(OnTrackFont.sectionHeader)
             .foregroundStyle(OnTrackTheme.dimText)
     }
 
@@ -2759,20 +2759,24 @@ private struct OnTrackPressButtonStyle: ButtonStyle {
 }
 
 private enum OnTrackFont {
-    static let accessory = Font.body.weight(.semibold)
-    static let action = Font.body.weight(.semibold)
-    static let body = Font.body
-    static let caption = Font.caption
-    static let captionStrong = Font.caption.weight(.bold)
-    static let chevron = Font.caption.weight(.bold)
-    static let control = Font.body.weight(.semibold)
-    static let icon = Font.title3.weight(.semibold)
-    static let label = Font.caption.weight(.medium)
-    static let metadata = Font.body
-    static let routeGlyph = Font.caption.weight(.bold)
-    static let symbol = Font.body.weight(.semibold)
-    static let time = Font.body.weight(.bold)
-    static let title = Font.headline
+    private static let compact = Font.system(size: 12)
+    private static let standard = Font.system(size: 18)
+
+    static let accessory = standard.weight(.semibold)
+    static let action = standard.weight(.semibold)
+    static let body = standard
+    static let caption = compact
+    static let captionStrong = compact.weight(.bold)
+    static let chevron = compact.weight(.bold)
+    static let control = standard.weight(.semibold)
+    static let icon = standard.weight(.semibold)
+    static let label = compact.weight(.medium)
+    static let metadata = standard
+    static let routeGlyph = compact.weight(.bold)
+    static let sectionHeader = compact.weight(.semibold)
+    static let symbol = standard.weight(.semibold)
+    static let time = standard.weight(.bold)
+    static let title = standard.weight(.semibold)
 }
 
 private extension View {
