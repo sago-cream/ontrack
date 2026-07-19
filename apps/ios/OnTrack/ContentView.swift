@@ -208,6 +208,7 @@ struct ContentView: View {
             timeSelection.mode.rawValue,
             Formatters.scheduleDate.string(from: timeSelection.date),
             Formatters.displayTime.string(from: timeSelection.date),
+            canLoadSchedule ? "ready" : "pending",
         ].joined(separator: "-")
     }
 
