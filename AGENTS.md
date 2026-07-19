@@ -7,5 +7,5 @@
 
 - Support URL: https://ontrack.hsichen.dev/docs/support
 - Privacy Policy URL: https://ontrack.hsichen.dev/docs/privacy
-- App Store screenshots: assets/app-store/screenshots
+- App Store screenshots: assets/screenshots
 - Review privacy/compliance answers before App Store submission; OnTrack uses location permission and network access for station detection and railway data.

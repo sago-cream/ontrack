@@ -5,7 +5,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ios-common.sh"
 
 CONFIGURATION="${IOS_CONFIGURATION:-Debug}"
 DERIVED_DATA_ROOT="${IOS_DERIVED_DATA_PATH:-$IOS_ROOT_DIR/build/ScreenshotDerivedData}"
-OUTPUT_DIR="${IOS_SCREENSHOT_OUTPUT_DIR:-$IOS_ROOT_DIR/assets/app-store/screenshots}"
+OUTPUT_DIR="${IOS_SCREENSHOT_OUTPUT_DIR:-$IOS_ROOT_DIR/assets/screenshots}"
 SCREENSHOT_PROFILES="${IOS_SCREENSHOT_PROFILES:-iphone69 iphone ipad}"
 IPHONE_69_DEVICE_NAME="${IOS_SCREENSHOT_IPHONE_69_DEVICE_NAME:-OnTrack 16 Pro Max Screenshots}"
 IPHONE_69_DEVICE_TYPE="${IOS_SCREENSHOT_IPHONE_69_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max}"

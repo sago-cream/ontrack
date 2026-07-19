@@ -20,7 +20,7 @@
 - `apps/ios`：iOS App、Xcode 專案與 Xcode 建置資源
 - `apps/web`：網頁版與公開網站素材
 - `apps/worker`：Cloudflare Worker 部署包裝
-- `assets/app-store/screenshots`：由 `bun run ios:screenshots` 產生的 App Store 截圖
+- `assets/screenshots`：由 `bun run ios:screenshots` 產生的 App Store 截圖
 
 ## 官方版本
 
