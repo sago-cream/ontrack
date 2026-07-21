@@ -12,6 +12,14 @@
         "deploy": "bun run deploy:prod",
         "deploy:dev": "bun run build && wrangler deploy --config apps/worker/wrangler.jsonc",
         "deploy:prod": "bash scripts/worker-deploy-prod.sh",
+        "android": "scripts/android-run.sh",
+        "android:bundle": "scripts/android-bundle.sh",
+        "android:check": "scripts/android-check.sh",
+        "android:publish": "scripts/android-publish.sh",
+        "android:release": "scripts/android-release.sh",
+        "android:screenshots": "scripts/android-capture-play-screenshot.sh",
+        "android:sync": "scripts/android-sync.sh",
+        "android:test:device": "scripts/android-test-device.sh",
         "ios": "scripts/ios-run-device.sh",
         "ios:build": "scripts/ios-build.sh",
         "ios:mock": "scripts/ios-run-mock-device.sh",
@@ -40,6 +48,8 @@
         ]
     },
     "devDependencies": {
+        "@capacitor/assets": "3.0.5",
+        "@capacitor/cli": "8.4.2",
         "@cloudflare/workers-types": "^4.20260607.1",
         "@eslint/js": "^9.39.1",
         "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
@@ -58,5 +68,9 @@
     "overrides": {
         "path-to-regexp": "^8.2.0",
         "undici": "^7.2.0"
+    },
+    "dependencies": {
+        "@capacitor/android": "8.4.2",
+        "@capacitor/core": "8.4.2"
     }
 }

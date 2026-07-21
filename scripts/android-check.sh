@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/android-common.sh"
+
+"$ANDROID_ROOT_DIR/scripts/android-sync.sh"
+android_gradle testDebugUnitTest lintDebug
+
+echo "Android unit tests and lint checks passed."

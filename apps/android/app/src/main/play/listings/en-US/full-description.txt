@@ -1,0 +1,16 @@
+Check Taiwan Railway departures the moment you open the app.
+
+OnTrack is designed for quick, everyday train checks. It can detect your nearby station, remember your preferred routes on your device, and show live departures and delay information without making you navigate through unnecessary screens.
+
+Features:
+• Live Taiwan Railway schedules and delay information
+• Optional nearby-station detection using your device location
+• Route suggestions based on preferences stored on your device
+• Departure and arrival-time search
+• Quick sharing of destination and arrival details
+• Traditional Chinese and English
+• Light, dark, and system appearance modes
+
+No account is required. OnTrack does not sell personal data, and raw location coordinates are not stored in the OnTrack application database.
+
+Railway data is provided through Taiwan's TDX platform. OnTrack is an independent app and is not affiliated with Taiwan Railway Corporation or the Ministry of Transportation and Communications.

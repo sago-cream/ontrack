@@ -1,0 +1,1 @@
+Initial Android release with live schedules, nearby-station detection, route suggestions, and quick arrival sharing.
