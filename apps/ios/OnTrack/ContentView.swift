@@ -8,6 +8,7 @@ private let scheduleRefreshInterval: TimeInterval = 5 * 60
 private let scheduleWarmupRetryDelayNanos: UInt64 = 4_000_000_000
 private let locationRefreshInterval: TimeInterval = 2 * 60
 private let manualOriginProtectionInterval: TimeInterval = 10 * 60
+private let stationHistoryLimit = 24
 private let timePickerMinuteInterval = 10
 private let stationPickerAnimation = Animation.snappy(duration: 0.28, extraBounce: 0)
 private let supportURL = URL(string: "https://ontrack.hsichen.dev/docs/support")!
@@ -138,6 +139,7 @@ struct ContentView: View {
     @AppStorage("ontrack_manual_origin_selected_at") private var manualOriginSelectedAt = 0.0
     @AppStorage("ontrack_frequent_destinations") private var frequentDestinationRecordsData = ""
     @AppStorage("ontrack_recent_destination_ids") private var recentDestinationIDs = ""
+    @AppStorage("ontrack_recent_origin_ids") private var recentOriginIDs = ""
     @AppStorage(AppPreferenceKey.language) private var languageCode = AppLanguageSetting.system.rawValue
     @AppStorage(AppPreferenceKey.appearance) private var appearanceRaw = AppAppearanceSetting.current.rawValue
     @AppStorage(AppPreferenceKey.messageFormat) private var messageFormatRaw = ShareMessageFormat.arrivalOnly.rawValue
@@ -181,7 +183,7 @@ struct ContentView: View {
         stationMap[destinationId]
     }
 
-    private var recentDestinationStations: [Station] {
+    private var algorithmicDestinationStations: [Station] {
         DestinationAutofill.rankedDestinationIDs(
             originId: originId,
             excludedId: originId,
@@ -189,8 +191,41 @@ struct ContentView: View {
             legacyDestinationIDs: legacyRecentDestinationIDs,
             stations: stations
         )
-        .prefix(3)
         .compactMap { stationMap[$0] }
+    }
+
+    private var destinationHistoryStations: [Station] {
+        DestinationAutofill.historyDestinationIDs(
+            recordsData: frequentDestinationRecordsData,
+            legacyDestinationIDs: legacyRecentDestinationIDs
+        )
+        .compactMap { stationMap[$0] }
+    }
+
+    private var algorithmicOriginStations: [Station] {
+        guard let coordinate = locationService.coordinate else {
+            return []
+        }
+
+        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        return stations
+            .compactMap { station -> (station: Station, distance: CLLocationDistance)? in
+                guard let latitude = station.lat, let longitude = station.lon else {
+                    return nil
+                }
+
+                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
+                return (station, userLocation.distance(from: stationLocation))
+            }
+            .sorted { $0.distance < $1.distance }
+            .map(\.station)
+    }
+
+    private var originHistoryStations: [Station] {
+        recentOriginIDs
+            .split(separator: ",")
+            .map(String.init)
+            .compactMap { stationMap[$0] }
     }
 
     private var legacyRecentDestinationIDs: [String] {
@@ -336,7 +371,12 @@ struct ContentView: View {
                         title: stationPicker.title,
                         stations: stations,
                         selectedStation: stationPicker == .origin ? originStation : destinationStation,
-                        suggestedStations: stationPicker == .destination ? recentDestinationStations : [],
+                        algorithmicStations: stationPicker == .origin
+                            ? algorithmicOriginStations
+                            : algorithmicDestinationStations,
+                        historyStations: stationPicker == .origin
+                            ? originHistoryStations
+                            : destinationHistoryStations,
                         onDismiss: dismissStationPicker
                     ) { station in
                         select(station: station, for: stationPicker)
@@ -714,6 +754,10 @@ struct ContentView: View {
         } else if source != .manual {
             manualOriginSelectedAt = 0
         }
+
+        if source == .geo || (source == .manual && selectedAt != nil) {
+            rememberOrigin(id)
+        }
     }
 
     private func autoFillDestinationIfNeeded(in candidateStations: [Station]? = nil) {
@@ -780,6 +824,15 @@ struct ContentView: View {
             legacyDestinationIDs: legacyRecentDestinationIDs
         )
         recentDestinationIDs = ""
+    }
+
+    private func rememberOrigin(_ id: String) {
+        var stationIDs = recentOriginIDs
+            .split(separator: ",")
+            .map(String.init)
+            .filter { $0 != id }
+        stationIDs.insert(id, at: 0)
+        recentOriginIDs = stationIDs.prefix(stationHistoryLimit).joined(separator: ",")
     }
 }
 
@@ -1622,7 +1675,8 @@ private struct StationSearchView: View {
     let title: String
     let stations: [Station]
     let selectedStation: Station?
-    let suggestedStations: [Station]
+    let algorithmicStations: [Station]
+    let historyStations: [Station]
     let onDismiss: () -> Void
     let onSelect: (Station) -> Void
 
@@ -1671,40 +1725,50 @@ private struct StationSearchView: View {
             .map(\.station)
     }
 
-    private var visibleMatchingStations: [Station] {
+    private var searchMatches: [Station] {
         guard isSearching else {
             return []
         }
 
-        return matchingStations.filter { !hiddenStationIDs.contains($0.id) }
+        return matchingStations.filter { $0.id != selectedStation?.id }
     }
 
-    private var restStations: [Station] {
-        stations.filter { station in
-            !hiddenStationIDs.contains(station.id) && station.name != taipeiCircularStationName
+    private var visibleAlgorithmicStations: [Station] {
+        let coveredIDs = Set(searchMatches.map(\.id))
+        return algorithmicStations
+            .filter { $0.id != selectedStation?.id && !coveredIDs.contains($0.id) }
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private var visibleHistoryStations: [Station] {
+        let coveredIDs = Set(searchMatches.map(\.id) + visibleAlgorithmicStations.map(\.id))
+        let uncoveredHistory = historyStations.filter {
+            $0.id != selectedStation?.id && !coveredIDs.contains($0.id)
         }
+
+        return searchMatches.isEmpty ? uncoveredHistory : Array(uncoveredHistory.prefix(2))
     }
 
-    private var visibleSuggestions: [Station] {
-        suggestedStations.filter { $0.id != selectedStation?.id }
+    private var otherStations: [Station] {
+        let coveredIDs = Set(
+            searchMatches.map(\.id)
+                + visibleAlgorithmicStations.map(\.id)
+                + visibleHistoryStations.map(\.id)
+        )
+
+        return stations.filter { station in
+            station.id != selectedStation?.id
+                && !coveredIDs.contains(station.id)
+                && station.name != taipeiCircularStationName
+        }
     }
 
     private var resultRows: [StationSearchResult] {
-        if isSearching {
-            return visibleMatchingStations.map { StationSearchResult(station: $0, role: .regular) }
-                + visibleSuggestions.map { StationSearchResult(station: $0, role: .recent) }
-        }
-
-        return visibleSuggestions.map { StationSearchResult(station: $0, role: .recent) }
-            + restStations.map { StationSearchResult(station: $0, role: .regular) }
-    }
-
-    private var hiddenStationIDs: Set<String> {
-        var stationIDs = Set(visibleSuggestions.map(\.id))
-        if let selectedStation {
-            stationIDs.insert(selectedStation.id)
-        }
-        return stationIDs
+        searchMatches.map { StationSearchResult(station: $0, role: .regular) }
+            + visibleAlgorithmicStations.map { StationSearchResult(station: $0, role: .algorithmic) }
+            + visibleHistoryStations.map { StationSearchResult(station: $0, role: .history) }
+            + otherStations.map { StationSearchResult(station: $0, role: .regular) }
     }
 
     private func selectedStation(_ station: Station) -> Station {
@@ -1863,12 +1927,19 @@ private struct RankedStation {
 }
 
 private enum StationSearchRowRole {
-    case recent
+    case algorithmic
+    case history
     case regular
 
     var iconSystemName: String {
         switch self {
-        case .recent:
+        case .algorithmic:
+            if #available(iOS 26.0, *) {
+                "sparkles.2"
+            } else {
+                "sparkles"
+            }
+        case .history:
             "clock"
         case .regular:
             "magnifyingglass"

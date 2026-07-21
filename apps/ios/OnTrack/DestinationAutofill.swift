@@ -47,6 +47,23 @@ enum DestinationAutofill {
         ).first ?? ""
     }
 
+    static func historyDestinationIDs(
+        recordsData: String,
+        legacyDestinationIDs: [String]
+    ) -> [String] {
+        let records = readRecords(
+            recordsData: recordsData,
+            legacyDestinationIDs: legacyDestinationIDs
+        )
+        var seenIDs = Set<String>()
+
+        return records
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .compactMap { record in
+                seenIDs.insert(record.id).inserted ? record.id : nil
+            }
+    }
+
     static func recordDestination(
         originId: String,
         stationId: String,
