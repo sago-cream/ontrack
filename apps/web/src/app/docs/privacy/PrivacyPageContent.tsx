@@ -130,6 +130,7 @@ export function PrivacyPageContent() {
             subtitleKey='privacy.subtitle'
             footerLinks={[
                 { href: '/docs/support', labelKey: 'docs.footer.support' },
+                { href: '/docs/legal', labelKey: 'docs.footer.legal' },
             ]}
             footerNoteKey='privacy.footerNote'
         >

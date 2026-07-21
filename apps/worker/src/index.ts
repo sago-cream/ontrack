@@ -48,6 +48,7 @@ const PUBLIC_DOCUMENT_PATHS = new Set([
     '/app',
     '/docs',
     '/docs/features',
+    '/docs/legal',
     '/docs/settings',
     '/docs/support',
     '/docs/privacy',

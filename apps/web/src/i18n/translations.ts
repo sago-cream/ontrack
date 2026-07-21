@@ -48,6 +48,13 @@ export const translations = {
         'docs.footer.label': '支援連結',
         'docs.footer.support': '支援',
         'docs.footer.privacy': '隱私權政策',
+        'docs.footer.legal': '法律聲明',
+        'legal.title': '法律聲明',
+        'legal.subtitle': 'OnTrack 使用的第三方商標與服務標誌資訊。',
+        'legal.footerNote': 'OnTrack 法律資訊。',
+        'legal.trademarks.title': '商標聲明',
+        'legal.trademarks.apple':
+            'Apple 和 Apple 標誌是 Apple Inc. 在美國及其他國家和地區註冊的商標。App Store 是 Apple Inc. 的服務標誌。',
         'support.title': 'OnTrack 支援',
         'support.subtitle': '需要協助使用 OnTrack？歡迎聯絡我們。',
         'support.footerNote': 'OnTrack 支援資訊。',
@@ -236,6 +243,14 @@ export const translations = {
         'docs.footer.label': 'Support links',
         'docs.footer.support': 'Support',
         'docs.footer.privacy': 'Privacy Policy',
+        'docs.footer.legal': 'Legal Notices',
+        'legal.title': 'Legal Notices',
+        'legal.subtitle':
+            'Third-party trademark and service mark information used by OnTrack.',
+        'legal.footerNote': 'Legal information for OnTrack.',
+        'legal.trademarks.title': 'Trademark Attribution',
+        'legal.trademarks.apple':
+            'Apple and the Apple logo are trademarks of Apple Inc., registered in the U.S. and other countries and regions. App Store is a service mark of Apple Inc.',
         'support.title': 'OnTrack Support',
         'support.subtitle': 'Need help with OnTrack? Send us a note.',
         'support.footerNote': 'Support resources for OnTrack.',

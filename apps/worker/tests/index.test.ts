@@ -34,6 +34,15 @@ function createAssets(): Fetcher {
     } as unknown as Fetcher;
 }
 
+function createLegalPageAssets(): Fetcher {
+    return {
+        fetch: async () =>
+            new Response('<h1>Legal Notices</h1>', {
+                headers: { 'Content-Type': 'text/html' },
+            }),
+    } as unknown as Fetcher;
+}
+
 function createScheduleRequest(query: string) {
     return new Request(`https://ontrack.test/api/schedule?${query}`);
 }
@@ -142,6 +151,26 @@ function createEnv(db: D1Database): Env {
         DB: db,
     };
 }
+
+describe('public document routes', () => {
+    test('serves the legal notice through static assets', async () => {
+        const { db } = createThrowingDatabase();
+        const env = {
+            ...createEnv(db),
+            ASSETS: createLegalPageAssets(),
+        };
+        const { ctx } = createContext();
+
+        const response = await worker.fetch(
+            new Request('https://ontrack.test/docs/legal'),
+            env,
+            ctx
+        );
+
+        expect(response.status).toBe(200);
+        expect(await response.text()).toContain('Legal Notices');
+    });
+});
 
 describe('schedule API policy', () => {
     test('rejects impossible dates before touching D1 or background work', async () => {

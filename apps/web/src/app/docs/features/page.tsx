@@ -39,6 +39,7 @@ export default function FeaturesDocsPage() {
                 { href: '/docs', label: 'Docs' },
                 { href: '/docs/settings', label: 'Settings' },
                 { href: '/docs/support', label: 'Support' },
+                { href: '/docs/legal', label: 'Legal Notices' },
             ]}
             footerNote='Feature documentation for OnTrack.'
         >

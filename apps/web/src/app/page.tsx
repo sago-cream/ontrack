@@ -211,6 +211,7 @@ export default function HomePage() {
                         </Link>
                         <Link href='/docs/support'>支援</Link>
                         <Link href='/docs/privacy'>隱私權</Link>
+                        <Link href='/docs/legal'>法律聲明</Link>
                     </nav>
                 </footer>
             </div>
