@@ -2,10 +2,12 @@ import { Clock3, MapPin, Navigation, Share2 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { AppStoreDialog } from './AppStoreDialog';
 import styles from './page.module.css';
 
 const HOME_URL = 'https://ontrack.hsichen.dev/';
+const APP_STORE_URL = 'https://apps.apple.com/tw/app/ontrack/id6784708806';
+const APP_STORE_BADGE_URL =
+    'https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/zh-TW?size=250x83';
 const APP_IMAGE = 'https://ontrack.hsichen.dev/demo.png';
 const APP_DESCRIPTION =
     '自動偵測您的所在車站，並依搭乘習慣預測路線。打開 App 的瞬間，即可掌握即時班次與延誤資訊。';
@@ -80,7 +82,9 @@ export default function HomePage() {
                         <Link className={styles.navTextLink} href='/app'>
                             網頁版
                         </Link>
-                        <AppStoreDialog className={styles.navTextLink} />
+                        <a className={styles.navTextLink} href={APP_STORE_URL}>
+                            App Store
+                        </a>
                     </div>
                 </nav>
 
@@ -93,10 +97,22 @@ export default function HomePage() {
                             App 的瞬間，即可掌握即時班次與延誤資訊。
                         </p>
                         <div className={styles.heroActions}>
-                            <Link className={styles.primaryCta} href='/app'>
+                            <Link className={styles.secondaryCta} href='/app'>
                                 網頁版
                             </Link>
-                            <AppStoreDialog className={styles.secondaryCta} />
+                            <a
+                                className={styles.appStoreBadgeLink}
+                                href={APP_STORE_URL}
+                                aria-label='在 App Store 下載 OnTrack'
+                            >
+                                <img
+                                    className={styles.appStoreBadge}
+                                    src={APP_STORE_BADGE_URL}
+                                    alt='在 App Store 下載'
+                                    width='250'
+                                    height='83'
+                                />
+                            </a>
                         </div>
                     </div>
                 </section>
