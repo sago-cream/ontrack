@@ -9,7 +9,7 @@ DESTINATION_AUTOFILL_CONFIG="$IOS_ROOT_DIR/apps/shared/destination-autofill.json
 PROJECT_FILE="$IOS_PROJECT_PATH/project.pbxproj"
 
 xcodebuild -list -project "$IOS_PROJECT_PATH" >/dev/null
-ios_assert_universal_ios_project
+ios_assert_iphone_only_ios_project
 [[ -f "$DESTINATION_AUTOFILL_CONFIG" ]] \
     || ios_die "Missing destination autofill config: $DESTINATION_AUTOFILL_CONFIG"
 python3 -m json.tool "$DESTINATION_AUTOFILL_CONFIG" >/dev/null \

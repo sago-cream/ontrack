@@ -19,4 +19,4 @@ xcodebuild \
     CODE_SIGNING_ALLOWED=NO \
     build
 
-ios_assert_supported_ios_app "$(ios_built_app_path "$DERIVED_DATA_PATH" "$CONFIGURATION" "$SDK")"
+ios_assert_iphone_only_ios_app "$(ios_built_app_path "$DERIVED_DATA_PATH" "$CONFIGURATION" "$SDK")"

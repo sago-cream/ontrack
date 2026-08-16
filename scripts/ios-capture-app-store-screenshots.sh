@@ -6,9 +6,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ios-common.sh"
 CONFIGURATION="${IOS_CONFIGURATION:-Debug}"
 DERIVED_DATA_ROOT="${IOS_DERIVED_DATA_PATH:-$IOS_ROOT_DIR/build/ScreenshotDerivedData}"
 OUTPUT_DIR="${IOS_SCREENSHOT_OUTPUT_DIR:-$IOS_ROOT_DIR/assets/app-store/screenshots}"
-SCREENSHOT_PROFILES="${IOS_SCREENSHOT_PROFILES:-iphone69 iphone ipad}"
-IPHONE_69_DEVICE_NAME="${IOS_SCREENSHOT_IPHONE_69_DEVICE_NAME:-OnTrack 16 Pro Max Screenshots}"
-IPHONE_69_DEVICE_TYPE="${IOS_SCREENSHOT_IPHONE_69_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max}"
+SCREENSHOT_PROFILES="${IOS_SCREENSHOT_PROFILES:-iphone69}"
+IPHONE_69_DEVICE_NAME="${IOS_SCREENSHOT_IPHONE_69_DEVICE_NAME:-${IOS_SCREENSHOT_DEVICE_NAME:-iPhone 17 Pro Max}}"
+IPHONE_69_DEVICE_TYPE="${IOS_SCREENSHOT_IPHONE_69_DEVICE_TYPE:-${IOS_SCREENSHOT_DEVICE_TYPE:-com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max}}"
 IPHONE_69_EXPECTED_WIDTH="${IOS_SCREENSHOT_IPHONE_69_EXPECTED_WIDTH:-1320}"
 IPHONE_69_EXPECTED_HEIGHT="${IOS_SCREENSHOT_IPHONE_69_EXPECTED_HEIGHT:-2868}"
 IPHONE_DEVICE_NAME="${IOS_SCREENSHOT_IPHONE_DEVICE_NAME:-${IOS_SCREENSHOT_DEVICE_NAME:-OnTrack 14 Plus Screenshots}}"
@@ -67,7 +67,7 @@ launch_for_screenshot() {
     esac
 }
 
-capture_png() {
+capture_image() {
     local device_id="$1"
     local output_path="$2"
     local expected_width="$3"
@@ -75,7 +75,7 @@ capture_png() {
     local width
     local height
 
-    xcrun simctl io "$device_id" screenshot --type=png --mask=ignored "$output_path" >/dev/null
+    xcrun simctl io "$device_id" screenshot --type=jpeg --mask=ignored "$output_path" >/dev/null
     sips -g pixelWidth -g pixelHeight "$output_path"
 
     width="$(sips -g pixelWidth "$output_path" | awk '/pixelWidth/ { print $2 }')"
@@ -140,18 +140,18 @@ capture_profile() {
     xcrun simctl install "$device_id" "$app_path"
     set_status_bar "$device_id" "$profile"
 
-    main_output="$OUTPUT_DIR/${output_prefix}-main.png"
-    support_output="$OUTPUT_DIR/${output_prefix}-support.png"
+    main_output="$OUTPUT_DIR/${output_prefix}-main.jpg"
+    support_output="$OUTPUT_DIR/${output_prefix}-support.jpg"
 
     echo "Capturing $profile main screenshot..."
     launch_for_screenshot "$device_id" main
     sleep 5
-    capture_png "$device_id" "$main_output" "$expected_width" "$expected_height"
+    capture_image "$device_id" "$main_output" "$expected_width" "$expected_height"
 
     echo "Capturing $profile Support OnTrack screenshot..."
     launch_for_screenshot "$device_id" support
     sleep 4
-    capture_png "$device_id" "$support_output" "$expected_width" "$expected_height"
+    capture_image "$device_id" "$support_output" "$expected_width" "$expected_height"
 
     echo "Captured $profile ASC screenshots:"
     echo "  $main_output"

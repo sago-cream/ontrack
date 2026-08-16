@@ -111,8 +111,8 @@ ios_assert_project_build_setting_equals() {
     fi
 }
 
-ios_assert_universal_ios_project() {
-    ios_assert_project_build_setting_equals TARGETED_DEVICE_FAMILY 1,2
+ios_assert_iphone_only_ios_project() {
+    ios_assert_project_build_setting_equals TARGETED_DEVICE_FAMILY 1
     ios_assert_project_build_setting_equals SUPPORTS_MACCATALYST NO
     ios_assert_project_build_setting_equals SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD NO
     ios_assert_project_build_setting_equals SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD NO
@@ -160,27 +160,13 @@ ios_app_device_family() {
     printf '%s\n' "$device_family_json" | tr -d '[][:space:]' | tr ',' '\n' | sed '/^$/d' | sort -n | paste -sd, -
 }
 
-ios_assert_supported_ios_app() {
+ios_assert_iphone_only_ios_app() {
     local app_path="$1"
     local normalized_device_family
     normalized_device_family="$(ios_app_device_family "$app_path")"
 
-    case "$normalized_device_family" in
-        1|2|1,2)
-            return
-            ;;
-    esac
-
-    ios_die "Expected built app UIDeviceFamily to contain only iPhone and iPad families, found: ${normalized_device_family:-missing}."
-}
-
-ios_assert_universal_ios_app() {
-    local app_path="$1"
-    local normalized_device_family
-    normalized_device_family="$(ios_app_device_family "$app_path")"
-
-    if [[ "$normalized_device_family" != "1,2" ]]; then
-        ios_die "Expected built app UIDeviceFamily to be exactly 1,2 for iPhone and iPad, found: ${normalized_device_family:-missing}."
+    if [[ "$normalized_device_family" != "1" ]]; then
+        ios_die "Expected built app UIDeviceFamily to be iPhone-only (1), found: ${normalized_device_family:-missing}."
     fi
 }
 
