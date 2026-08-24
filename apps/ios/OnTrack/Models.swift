@@ -312,7 +312,6 @@ enum TrainDisplay {
                 timeToMinutes(train.arrivalTime)
             }
         }
-
         let orderedTrains = trains.enumerated()
             .sorted { lhs, rhs in
                 let lhsMinutes = comparisonMinutes(lhs.element)
