@@ -1541,8 +1541,7 @@ private struct StationTrigger: View {
                     RouteGlyph(kind: glyph, color: glyphColor)
 
                     if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
+                        SkeletonStationLabel()
                     } else {
                         Text(station?.displayName ?? "")
                             .font(OnTrackFont.control)
@@ -3515,6 +3514,15 @@ private struct SkeletonTrainCard: View {
             .frame(height: TrainPanelLayout.trainCardHeight)
             .onTrackSurfaceRing(castsShadow: false)
             .opacity(0.7)
+    }
+}
+
+private struct SkeletonStationLabel: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(OnTrackTheme.dimText.opacity(0.18))
+            .frame(width: 96, height: 16)
+            .accessibilityHidden(true)
     }
 }
 
