@@ -313,26 +313,28 @@ enum TrainDisplay {
             }
         }
 
-        let nextScheduledIndex = trains.firstIndex {
-            timeToMinutes($0.departureTime) >= targetMinutes
-        }
-        let nextCatchableIndex = trains.firstIndex {
+        let orderedTrains = trains.enumerated()
+            .sorted { lhs, rhs in
+                let lhsMinutes = comparisonMinutes(lhs.element)
+                let rhsMinutes = comparisonMinutes(rhs.element)
+                return lhsMinutes == rhsMinutes ? lhs.offset < rhs.offset : lhsMinutes < rhsMinutes
+            }
+            .map(\.element)
+        let nextCatchableIndex = orderedTrains.firstIndex {
             comparisonMinutes($0) >= targetMinutes
         }
 
         guard let nextCatchableIndex else {
-            let displayTrains = Array(trains.suffix(3))
+            let displayTrains = Array(orderedTrains.suffix(3))
             return DisplaySchedule(trains: displayTrains, recommendedTrain: displayTrains.last)
         }
 
-        let start = max(0, nextCatchableIndex - 1)
-        let minimumEnd = start + 3
-        let scheduledContextEnd = nextScheduledIndex.map { $0 + 2 } ?? minimumEnd
-        let end = min(trains.count, max(minimumEnd, scheduledContextEnd))
+        let end = min(orderedTrains.count, nextCatchableIndex + 3)
+        let displayTrains = Array(orderedTrains[nextCatchableIndex..<end])
 
         return DisplaySchedule(
-            trains: Array(trains[start..<end]),
-            recommendedTrain: trains[nextCatchableIndex]
+            trains: displayTrains,
+            recommendedTrain: displayTrains.first
         )
     }
 

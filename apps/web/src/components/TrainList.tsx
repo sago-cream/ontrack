@@ -99,7 +99,7 @@ function formatPrice(price?: number | null): string | null {
     return price == null ? null : `NT$${price.toLocaleString('en-US')}`;
 }
 
-function buildDisplayState(
+export function buildDisplayState(
     trains: TrainInfo[],
     targetTime: string,
     timeMode: TimeMode
@@ -109,11 +109,10 @@ function buildDisplayState(
         timeMode === 'arrival'
             ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
             : getEffectiveDepartureMinutes;
-
-    const nextScheduledTrainIndex = trains.findIndex(
-        (train) => timeToMinutes(train.departureTime) >= targetTimeMinutes
+    const orderedTrains = [...trains].sort(
+        (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
     );
-    const nextCatchableTrainIndex = trains.findIndex(
+    const nextCatchableTrainIndex = orderedTrains.findIndex(
         (train) => getComparisonMinutes(train) >= targetTimeMinutes
     );
 
@@ -121,19 +120,14 @@ function buildDisplayState(
     let recommendedTrain: TrainInfo | null = null;
 
     if (nextCatchableTrainIndex === -1) {
-        displayTrains = trains.slice(-3);
+        displayTrains = orderedTrains.slice(-3);
         recommendedTrain = displayTrains[displayTrains.length - 1] ?? null;
     } else {
-        const start = Math.max(0, nextCatchableTrainIndex - 1);
-        const minimumEnd = start + 3;
-        const scheduledContextEnd =
-            nextScheduledTrainIndex === -1
-                ? minimumEnd
-                : nextScheduledTrainIndex + 2;
-        const end = Math.max(minimumEnd, scheduledContextEnd);
-
-        displayTrains = trains.slice(start, end);
-        recommendedTrain = trains[nextCatchableTrainIndex] ?? null;
+        displayTrains = orderedTrains.slice(
+            nextCatchableTrainIndex,
+            nextCatchableTrainIndex + 3
+        );
+        recommendedTrain = displayTrains[0] ?? null;
     }
 
     return { displayTrains, recommendedTrain };
