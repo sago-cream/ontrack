@@ -384,6 +384,9 @@ struct ContentView: View {
                 WidgetAppearanceStore.save(rawValue: rawValue)
             }
             .task(id: scheduleTaskID) {
+                trains = []
+                allScheduleTrains = []
+                selectedTrain = nil
                 await loadSchedule()
             }
             .onReceive(scheduleRefreshTimer) { _ in
@@ -1538,8 +1541,8 @@ private struct StationTrigger: View {
                     RouteGlyph(kind: glyph, color: glyphColor)
 
                     if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
+                        SkeletonBar(width: 96, height: 16)
+                            .accessibilityHidden(true)
                     } else {
                         Text(station?.displayName ?? "")
                             .font(OnTrackFont.control)
@@ -3507,11 +3510,61 @@ private struct PanelEmptyState: View {
 
 private struct SkeletonTrainCard: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
-            .fill(OnTrackTheme.panel)
+        VStack(spacing: TrainPanelLayout.rowGap) {
+            HStack(spacing: OnTrackTheme.space2) {
+                SkeletonBar(width: 44, height: 14)
+
+                HStack(spacing: OnTrackTheme.space1) {
+                    SkeletonBar(width: 8, height: 1)
+                    SkeletonBar(width: 32, height: 10)
+                    SkeletonBar(width: 8, height: 1)
+                }
+                .frame(width: TrainPanelLayout.tripSeparatorWidth)
+
+                SkeletonBar(width: 44, height: 14)
+
+                Spacer(minLength: OnTrackTheme.space2)
+
+                SkeletonBar(width: 40, height: 10)
+            }
+            .frame(height: TrainPanelLayout.topRowHeight)
+
+            HStack(spacing: OnTrackTheme.space2) {
+                HStack(spacing: OnTrackTheme.space1) {
+                    SkeletonBar(width: 36, height: 12)
+                    SkeletonBar(width: 32, height: 12)
+                }
+
+                Spacer()
+
+                SkeletonBar(width: 64, height: 12)
+            }
+            .frame(height: TrainPanelLayout.bottomRowHeight)
+        }
+        .padding(.horizontal, TrainPanelLayout.cardHorizontalInset)
+        .padding(.vertical, TrainPanelLayout.cardVerticalInset)
+        .frame(maxWidth: .infinity)
             .frame(height: TrainPanelLayout.trainCardHeight)
-            .onTrackSurfaceRing(castsShadow: false)
-            .opacity(0.7)
+            .background(
+                OnTrackTheme.panel,
+                in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+                    .strokeBorder(OnTrackTheme.border, lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SkeletonBar: View {
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: height / 2)
+            .fill(OnTrackTheme.dimText.opacity(0.18))
+            .frame(width: width, height: height)
     }
 }
 
