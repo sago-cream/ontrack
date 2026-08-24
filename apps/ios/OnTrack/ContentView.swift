@@ -212,6 +212,7 @@ struct ContentView: View {
         [
             originId,
             destinationId,
+            canLoadSchedule ? "ready" : "waiting",
             timeSelection.mode.rawValue,
             Formatters.scheduleDate.string(from: timeSelection.date),
             Formatters.displayTime.string(from: timeSelection.date),
