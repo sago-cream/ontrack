@@ -99,21 +99,31 @@ function formatPrice(price?: number | null): string | null {
     return price == null ? null : `NT$${price.toLocaleString('en-US')}`;
 }
 
-function buildDisplayState(
+export function buildDisplayState(
     trains: TrainInfo[],
     targetTime: string,
     timeMode: TimeMode
 ) {
     const targetTimeMinutes = timeToMinutes(targetTime);
+    const getScheduledMinutes =
+        timeMode === 'arrival'
+            ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
+            : (train: TrainInfo) => timeToMinutes(train.departureTime);
     const getComparisonMinutes =
         timeMode === 'arrival'
             ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
             : getEffectiveDepartureMinutes;
+    const orderedTrains =
+        timeMode === 'arrival'
+            ? [...trains].sort(
+                  (a, b) => getScheduledMinutes(a) - getScheduledMinutes(b)
+              )
+            : trains;
 
-    const nextScheduledTrainIndex = trains.findIndex(
-        (train) => timeToMinutes(train.departureTime) >= targetTimeMinutes
+    const nextScheduledTrainIndex = orderedTrains.findIndex(
+        (train) => getScheduledMinutes(train) >= targetTimeMinutes
     );
-    const nextCatchableTrainIndex = trains.findIndex(
+    const nextCatchableTrainIndex = orderedTrains.findIndex(
         (train) => getComparisonMinutes(train) >= targetTimeMinutes
     );
 
@@ -121,7 +131,7 @@ function buildDisplayState(
     let recommendedTrain: TrainInfo | null = null;
 
     if (nextCatchableTrainIndex === -1) {
-        displayTrains = trains.slice(-3);
+        displayTrains = orderedTrains.slice(-3);
         recommendedTrain = displayTrains[displayTrains.length - 1] ?? null;
     } else {
         const start = Math.max(0, nextCatchableTrainIndex - 1);
@@ -132,8 +142,8 @@ function buildDisplayState(
                 : nextScheduledTrainIndex + 2;
         const end = Math.max(minimumEnd, scheduledContextEnd);
 
-        displayTrains = trains.slice(start, end);
-        recommendedTrain = trains[nextCatchableTrainIndex] ?? null;
+        displayTrains = orderedTrains.slice(start, end);
+        recommendedTrain = orderedTrains[nextCatchableTrainIndex] ?? null;
     }
 
     return { displayTrains, recommendedTrain };
