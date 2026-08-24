@@ -384,6 +384,9 @@ struct ContentView: View {
                 WidgetAppearanceStore.save(rawValue: rawValue)
             }
             .task(id: scheduleTaskID) {
+                trains = []
+                allScheduleTrains = []
+                selectedTrain = nil
                 await loadSchedule()
             }
             .onReceive(scheduleRefreshTimer) { _ in
