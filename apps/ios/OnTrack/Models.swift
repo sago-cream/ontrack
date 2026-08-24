@@ -304,6 +304,14 @@ enum TrainDisplay {
 
     static func displaySchedule(trains: [TrainInfo], targetTime: String, timeMode: TimeMode) -> DisplaySchedule {
         let targetMinutes = timeToMinutes(targetTime)
+        let scheduledMinutes: (TrainInfo) -> Int = { train in
+            switch timeMode {
+            case .now, .departure, .lastTrain:
+                timeToMinutes(train.departureTime)
+            case .arrival:
+                timeToMinutes(train.arrivalTime)
+            }
+        }
         let comparisonMinutes: (TrainInfo) -> Int = { train in
             switch timeMode {
             case .now, .departure, .lastTrain:
@@ -312,27 +320,30 @@ enum TrainDisplay {
                 timeToMinutes(train.arrivalTime)
             }
         }
+        let orderedTrains = timeMode == .arrival
+            ? trains.sorted { scheduledMinutes($0) < scheduledMinutes($1) }
+            : trains
 
-        let nextScheduledIndex = trains.firstIndex {
-            timeToMinutes($0.departureTime) >= targetMinutes
+        let nextScheduledIndex = orderedTrains.firstIndex {
+            scheduledMinutes($0) >= targetMinutes
         }
-        let nextCatchableIndex = trains.firstIndex {
+        let nextCatchableIndex = orderedTrains.firstIndex {
             comparisonMinutes($0) >= targetMinutes
         }
 
         guard let nextCatchableIndex else {
-            let displayTrains = Array(trains.suffix(3))
+            let displayTrains = Array(orderedTrains.suffix(3))
             return DisplaySchedule(trains: displayTrains, recommendedTrain: displayTrains.last)
         }
 
         let start = max(0, nextCatchableIndex - 1)
         let minimumEnd = start + 3
         let scheduledContextEnd = nextScheduledIndex.map { $0 + 2 } ?? minimumEnd
-        let end = min(trains.count, max(minimumEnd, scheduledContextEnd))
+        let end = min(orderedTrains.count, max(minimumEnd, scheduledContextEnd))
 
         return DisplaySchedule(
-            trains: Array(trains[start..<end]),
-            recommendedTrain: trains[nextCatchableIndex]
+            trains: Array(orderedTrains[start..<end]),
+            recommendedTrain: orderedTrains[nextCatchableIndex]
         )
     }
 
