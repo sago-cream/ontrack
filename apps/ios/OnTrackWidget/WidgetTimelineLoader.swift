@@ -10,7 +10,6 @@ enum WidgetTimelineLoader {
     private static let refreshInterval: TimeInterval = 15 * 60
     private static let futureEntryWindow: TimeInterval = 3 * 60 * 60
     private static let liveDataFreshnessLimit = 15 * 60
-    private static let warmupRetryDelay: UInt64 = 2_000_000_000
 
     static func load(now: Date = Date()) async -> WidgetTimelineResult {
         let fallbackSnapshot = freshenedFallbackSnapshot(now: now)
@@ -28,7 +27,11 @@ enum WidgetTimelineLoader {
                     context: WidgetRouteContextStore.load(),
                     now: now
                 ),
-                let response = try await loadSchedule(route: route, now: now)
+                let response = try await ScheduleAcquisition().load(
+                    route: route,
+                    date: now,
+                    intent: .widget
+                )
             else {
                 return fallbackResult(snapshot: fallbackSnapshot, now: now)
             }
@@ -51,29 +54,6 @@ enum WidgetTimelineLoader {
         } catch {
             return fallbackResult(snapshot: fallbackSnapshot, now: now)
         }
-    }
-
-    private static func loadSchedule(
-        route: StationChoice.Route,
-        now: Date
-    ) async throws -> ScheduleResponse? {
-        for attempt in 0..<2 {
-            let response = try await APIClient.shared.schedule(
-                origin: route.origin,
-                destination: route.destination,
-                date: now
-            )
-
-            if response.meta?.scheduleCacheStatus != .warming {
-                return response
-            }
-
-            if attempt == 0 {
-                try? await Task.sleep(nanoseconds: warmupRetryDelay)
-            }
-        }
-
-        return nil
     }
 
     private static func resolveRoute(
