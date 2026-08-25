@@ -25,6 +25,7 @@ xcrun swiftc \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/APIClient.swift" \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/ContentView.swift" \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/DestinationAutofill.swift" \
+    "$IOS_ROOT_DIR/apps/ios/Shared/StationChoice.swift" \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/Models.swift" \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/OnTrackApp.swift" \
     "$IOS_ROOT_DIR/apps/ios/OnTrack/UpdateAvailabilityManager.swift"

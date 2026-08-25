@@ -261,7 +261,7 @@ enum DestinationAutofill {
         stations: [Station]
     ) -> [DestinationCandidate] {
         let stationCandidates = stations
-            .filter { isValidStationId($0.id) && !isTaipeiCircularStation($0) }
+            .filter { isValidStationId($0.id) && !StationChoice.isCircularStation($0) }
             .map { DestinationCandidate(id: $0.id, name: $0.name) }
 
         guard stationCandidates.isEmpty else {
