@@ -13,3 +13,7 @@ An ordered origin and destination station pair.
 **Station choice**:
 The rider's current route intent, including manual or location-derived origins, destination history, and station recommendations.
 _Avoid_: Route selection state
+
+**Schedule**:
+The trains serving one Route on a railway operating date, together with the current availability of timetable and live-running data.
+_Avoid_: Train list

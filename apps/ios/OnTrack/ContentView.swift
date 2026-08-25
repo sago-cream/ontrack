@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 
 private let scheduleRefreshInterval: TimeInterval = 5 * 60
-private let scheduleWarmupRetryDelayNanos: UInt64 = 4_000_000_000
 private let locationRefreshInterval: TimeInterval = 2 * 60
 private let manualOriginProtectionInterval: TimeInterval = 10 * 60
 private let stationHistoryLimit = 24
@@ -563,25 +562,14 @@ struct ContentView: View {
         }
 
         do {
-            var response: ScheduleResponse?
-            for attempt in 0..<3 {
-                let candidate = try await APIClient.shared.schedule(
+            let response = try await ScheduleAcquisition().load(
+                route: StationChoice.Route(
                     origin: originStation,
-                    destination: destinationStation,
-                    date: timeSelection.scheduleDate,
-                    refreshLive: refreshLive && attempt == 0
-                )
-                response = candidate
-
-                guard candidate.meta?.scheduleCacheStatus == .warming, attempt < 2 else {
-                    break
-                }
-
-                try? await Task.sleep(nanoseconds: scheduleWarmupRetryDelayNanos)
-                if Task.isCancelled {
-                    return
-                }
-            }
+                    destination: destinationStation
+                ),
+                date: timeSelection.scheduleDate,
+                intent: .foreground(refreshLive: refreshLive)
+            )
 
             guard let response, response.meta?.scheduleCacheStatus != .warming else {
                 trains = []
