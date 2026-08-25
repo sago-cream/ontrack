@@ -2,7 +2,6 @@ import CoreLocation
 import SwiftUI
 import UIKit
 
-private let taipeiMainStationName = "臺北"
 private let scheduleRefreshInterval: TimeInterval = 5 * 60
 private let scheduleWarmupRetryDelayNanos: UInt64 = 4_000_000_000
 private let locationRefreshInterval: TimeInterval = 2 * 60
@@ -131,6 +130,17 @@ struct ContentView: View {
         Dictionary(uniqueKeysWithValues: stations.map { ($0.id, $0) })
     }
 
+    private var stationChoice: StationChoice {
+        StationChoice(stations: stations)
+    }
+
+    private var stationChoiceHistory: StationChoiceHistory {
+        StationChoiceHistory(
+            recordsData: frequentDestinationRecordsData,
+            legacyDestinationIDs: legacyRecentDestinationIDs
+        )
+    }
+
     private var originStation: Station? {
         stationMap[originId]
     }
@@ -140,22 +150,14 @@ struct ContentView: View {
     }
 
     private var algorithmicDestinationStations: [Station] {
-        DestinationAutofill.rankedDestinationIDs(
-            originId: originId,
-            excludedId: originId,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs,
-            stations: stations
+        stationChoice.destinationRecommendations(
+            originID: originId,
+            history: stationChoiceHistory
         )
-        .compactMap { stationMap[$0] }
     }
 
     private var destinationHistoryStations: [Station] {
-        DestinationAutofill.historyDestinationIDs(
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs
-        )
-        .compactMap { stationMap[$0] }
+        stationChoice.destinationHistory(stationChoiceHistory)
     }
 
     private var algorithmicOriginStations: [Station] {
@@ -163,18 +165,7 @@ struct ContentView: View {
             return []
         }
 
-        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return stations
-            .compactMap { station -> (station: Station, distance: CLLocationDistance)? in
-                guard let latitude = station.lat, let longitude = station.lon else {
-                    return nil
-                }
-
-                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
-                return (station, userLocation.distance(from: stationLocation))
-            }
-            .sorted { $0.distance < $1.distance }
-            .map(\.station)
+        return stationChoice.nearbyStations(to: coordinate)
     }
 
     private var originHistoryStations: [Station] {
@@ -753,9 +744,7 @@ struct ContentView: View {
 
         if originId.isEmpty {
             setOrigin(
-                loadedStations.first(where: { $0.name == taipeiMainStationName || $0.name == "台北" })?.id
-                    ?? loadedStations.first?.id
-                    ?? "",
+                StationChoice(stations: loadedStations).defaultOrigin?.id ?? "",
                 source: .manual
             )
         } else if isManualOriginProtected {
@@ -794,23 +783,12 @@ struct ContentView: View {
         locationService.requestLocation()
     }
 
-    private func selectNearestOrigin(to coordinate: UserCoordinate) {
+    private func selectNearestOrigin(to coordinate: StationCoordinate) {
         guard !stations.isEmpty else {
             return
         }
 
-        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let nearestStation = stations
-            .compactMap { station -> (Station, CLLocationDistance)? in
-                guard let latitude = station.lat, let longitude = station.lon else {
-                    return nil
-                }
-
-                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
-                return (station, userLocation.distance(from: stationLocation))
-            }
-            .min { $0.1 < $1.1 }?
-            .0
+        let nearestStation = stationChoice.nearbyStations(to: coordinate).first
 
         guard let nearestStation else {
             fallbackToCachedOrigin()
@@ -873,12 +851,12 @@ struct ContentView: View {
             return
         }
 
-        let autoFillDestinationId = DestinationAutofill.autoFillDestinationID(
-            originId: originId,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs,
-            stations: availableStations
-        )
+        let autoFillDestinationId = StationChoice(stations: availableStations)
+            .autoFilledDestination(
+                originID: originId,
+                history: stationChoiceHistory
+            )?
+            .id ?? ""
 
         guard !autoFillDestinationId.isEmpty else {
             destinationId = ""
@@ -890,14 +868,8 @@ struct ContentView: View {
     }
 
     private func resolvePreferredStationId(_ stationId: String, in candidateStations: [Station]? = nil) -> String {
-        let availableStations = candidateStations ?? stations
-        guard let station = availableStations.first(where: { $0.id == stationId }),
-              isTaipeiCircularStation(station)
-        else {
-            return stationId
-        }
-
-        return availableStations.first(where: { $0.name == taipeiMainStationName })?.id ?? stationId
+        StationChoice(stations: candidateStations ?? stations).preferredStation(id: stationId)?.id
+            ?? stationId
     }
 
     private func isKnownStation(_ id: String, in stations: [Station]) -> Bool {
@@ -917,12 +889,11 @@ struct ContentView: View {
             return
         }
 
-        frequentDestinationRecordsData = DestinationAutofill.recordDestination(
-            originId: originId,
-            stationId: id,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs
-        )
+        frequentDestinationRecordsData = stationChoice.recordingDestination(
+            id,
+            from: originId,
+            history: stationChoiceHistory
+        ).recordsData
         recentDestinationIDs = ""
     }
 
@@ -948,14 +919,9 @@ private enum DestinationSelectionSource {
     case auto
 }
 
-private struct UserCoordinate: Equatable, Sendable {
-    let latitude: Double
-    let longitude: Double
-}
-
 @MainActor
 private final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var coordinate: UserCoordinate?
+    @Published var coordinate: StationCoordinate?
     @Published var locationErrorID: UUID?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isRequesting = false
@@ -1020,7 +986,7 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
             return
         }
 
-        let updatedCoordinate = UserCoordinate(
+        let updatedCoordinate = StationCoordinate(
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude
         )
@@ -1859,115 +1825,13 @@ private struct StationSearchView: View {
         selectedStation?.displayName ?? AppText.searchStation
     }
 
-    private var matchingStations: [Station] {
-        let normalizedSearch = trimmedSearch.replacingOccurrences(of: "台", with: "臺")
-        let normalizedEnglishSearch = normalizedEnglishName(trimmedSearch)
-        let allowsCircularStation = isCircularSearch(trimmedSearch)
-
-        return stations
-            .enumerated()
-            .compactMap { index, station -> RankedStation? in
-                let normalizedStationName = normalizedEnglishName(station.nameEn)
-                let matches = station.name.localizedCaseInsensitiveContains(trimmedSearch)
-                    || station.name.localizedCaseInsensitiveContains(normalizedSearch)
-                    || normalizedStationName.contains(normalizedEnglishSearch)
-                    || station.id.localizedCaseInsensitiveContains(trimmedSearch)
-
-                guard matches, allowsCircularStation || !isTaipeiCircularStation(station) else {
-                    return nil
-                }
-
-                let isExactMatch = station.name == trimmedSearch
-                    || station.name == normalizedSearch
-                    || normalizedStationName == normalizedEnglishSearch
-                let priority = isExactMatch ? 0 : 1
-                return RankedStation(station: station, priority: priority, index: index)
-            }
-            .sorted { lhs, rhs in
-                lhs.priority == rhs.priority ? lhs.index < rhs.index : lhs.priority < rhs.priority
-            }
-            .map(\.station)
-    }
-
-    private var searchMatches: [Station] {
-        guard isSearching else {
-            return []
-        }
-
-        return matchingStations.filter { $0.id != selectedStation?.id }
-    }
-
-    private var visibleAlgorithmicStations: [Station] {
-        let coveredIDs = Set(searchMatches.map(\.id))
-        return algorithmicStations
-            .filter {
-                $0.id != selectedStation?.id
-                    && !coveredIDs.contains($0.id)
-                    && !isTaipeiCircularStation($0)
-            }
-            .prefix(3)
-            .map { $0 }
-    }
-
-    private var visibleHistoryStations: [Station] {
-        let coveredIDs = Set(searchMatches.map(\.id) + visibleAlgorithmicStations.map(\.id))
-        let uncoveredHistory = historyStations.filter {
-            $0.id != selectedStation?.id
-                && !coveredIDs.contains($0.id)
-                && !isTaipeiCircularStation($0)
-        }
-
-        return searchMatches.isEmpty ? uncoveredHistory : Array(uncoveredHistory.prefix(2))
-    }
-
-    private var otherStations: [Station] {
-        let coveredIDs = Set(
-            searchMatches.map(\.id)
-                + visibleAlgorithmicStations.map(\.id)
-                + visibleHistoryStations.map(\.id)
+    private var resultRows: [StationChoice.Suggestion] {
+        StationChoice(stations: stations).suggestions(
+            query: trimmedSearch,
+            selectedID: selectedStation?.id,
+            recommendations: algorithmicStations,
+            history: historyStations
         )
-
-        return stations.filter { station in
-            station.id != selectedStation?.id
-                && !coveredIDs.contains(station.id)
-                && !isTaipeiCircularStation(station)
-        }
-    }
-
-    private var resultRows: [StationSearchResult] {
-        searchMatches.map { StationSearchResult(station: $0, role: .regular) }
-            + visibleAlgorithmicStations.map { StationSearchResult(station: $0, role: .algorithmic) }
-            + visibleHistoryStations.map { StationSearchResult(station: $0, role: .history) }
-            + otherStations.map { StationSearchResult(station: $0, role: .regular) }
-    }
-
-    private func selectedStation(_ station: Station) -> Station {
-        guard isTaipeiCircularStation(station), !isCircularSearch(searchText) else {
-            return station
-        }
-
-        return stations.first(where: { $0.name == taipeiMainStationName }) ?? station
-    }
-
-    private func normalizedEnglishName(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "_", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-    }
-
-    private func isCircularSearch(_ value: String) -> Bool {
-        let normalizedValue = value
-            .replacingOccurrences(of: "台", with: "臺")
-            .lowercased()
-
-        return normalizedValue.contains("環島")
-            || normalizedValue.contains("circular")
-            || normalizedValue.contains("circle")
-            || normalizedValue.contains("loop")
-            || normalizedValue.contains("round island")
-            || normalizedValue.contains("around island")
-            || normalizedValue.contains("surround island")
     }
 
     private func dismissSearch() {
@@ -1980,10 +1844,9 @@ private struct StationSearchView: View {
 
     private func selectSearchResult(_ station: Station) {
         isSearchFocused = false
-        let resolvedStation = selectedStation(station)
 
         DispatchQueue.main.async {
-            onSelect(resolvedStation)
+            onSelect(station)
         }
     }
 
@@ -2057,7 +1920,7 @@ private struct StationSearchView: View {
                             ForEach(resultRows) { row in
                                 StationSearchRow(
                                     station: row.station,
-                                    role: row.role
+                                    kind: row.kind
                                 ) {
                                     selectSearchResult(row.station)
                                 }
@@ -2082,26 +1945,7 @@ private struct StationSearchView: View {
     }
 }
 
-private struct StationSearchResult: Identifiable {
-    let station: Station
-    let role: StationSearchRowRole
-
-    var id: String {
-        "\(role)-\(station.id)"
-    }
-}
-
-private struct RankedStation {
-    let station: Station
-    let priority: Int
-    let index: Int
-}
-
-private enum StationSearchRowRole {
-    case algorithmic
-    case history
-    case regular
-
+private extension StationChoice.SuggestionKind {
     var iconSystemName: String {
         switch self {
         case .algorithmic:
@@ -2117,22 +1961,19 @@ private enum StationSearchRowRole {
         }
     }
 
-    var iconColor: Color {
-        OnTrackTheme.dimText
-    }
 }
 
 private struct StationSearchRow: View {
     let station: Station
-    let role: StationSearchRowRole
+    let kind: StationChoice.SuggestionKind
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: OnTrackTheme.space3) {
-                Image(systemName: role.iconSystemName)
+                Image(systemName: kind.iconSystemName)
                     .font(OnTrackFont.symbol)
-                    .foregroundStyle(role.iconColor)
+                    .foregroundStyle(OnTrackTheme.dimText)
                     .frame(width: 24)
 
                 Text(station.displayName)

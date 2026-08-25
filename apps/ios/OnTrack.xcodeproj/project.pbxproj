@@ -18,6 +18,7 @@
         A10000000000000000000028 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* WidgetSnapshot.swift */; };
         A10000000000000000000029 /* TrainWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* TrainWidgetContent.swift */; };
         A1000000000000000000002A /* UpdateAvailabilityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* UpdateAvailabilityManager.swift */; };
+        A1000000000000000000002B /* StationChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* StationChoice.swift */; };
         A20000000000000000000020 /* OnTrackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* OnTrackWidget.swift */; };
         A20000000000000000000021 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* WidgetSnapshot.swift */; };
         A20000000000000000000022 /* OnTrackWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* OnTrackWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -30,6 +31,7 @@
         A20000000000000000000029 /* launch-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* launch-logo.png */; };
         A2000000000000000000002A /* launch-logo@2x.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* launch-logo@2x.png */; };
         A2000000000000000000002B /* launch-logo@3x.png in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* launch-logo@3x.png */; };
+        A2000000000000000000002C /* StationChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* StationChoice.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,6 +82,7 @@
         A20000000000000000000016 /* launch-logo.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../OnTrack/Assets.xcassets/LaunchLogo.imageset/launch-logo.png"; sourceTree = "<group>"; };
         A20000000000000000000017 /* launch-logo@2x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../OnTrack/Assets.xcassets/LaunchLogo.imageset/launch-logo@2x.png"; sourceTree = "<group>"; };
         A20000000000000000000018 /* launch-logo@3x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../OnTrack/Assets.xcassets/LaunchLogo.imageset/launch-logo@3x.png"; sourceTree = "<group>"; };
+        A20000000000000000000019 /* StationChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationChoice.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +144,7 @@
         A20000000000000000000005 /* Shared */ = {
             isa = PBXGroup;
             children = (
+                A20000000000000000000019 /* StationChoice.swift */,
                 A20000000000000000000013 /* WidgetSnapshot.swift */,
                 A20000000000000000000014 /* TrainWidgetContent.swift */,
             );
@@ -274,6 +278,7 @@
                 A10000000000000000000028 /* WidgetSnapshot.swift in Sources */,
                 A10000000000000000000029 /* TrainWidgetContent.swift in Sources */,
                 A1000000000000000000002A /* UpdateAvailabilityManager.swift in Sources */,
+                A1000000000000000000002B /* StationChoice.swift in Sources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };
@@ -286,6 +291,7 @@
                 A20000000000000000000025 /* Models.swift in Sources */,
                 A20000000000000000000026 /* APIClient.swift in Sources */,
                 A20000000000000000000027 /* DestinationAutofill.swift in Sources */,
+                A2000000000000000000002C /* StationChoice.swift in Sources */,
                 A20000000000000000000021 /* WidgetSnapshot.swift in Sources */,
                 A20000000000000000000023 /* TrainWidgetContent.swift in Sources */,
             );

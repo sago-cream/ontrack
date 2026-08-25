@@ -54,7 +54,7 @@ enum WidgetTimelineLoader {
     }
 
     private static func loadSchedule(
-        route: (origin: Station, destination: Station),
+        route: StationChoice.Route,
         now: Date
     ) async throws -> ScheduleResponse? {
         for attempt in 0..<2 {
@@ -78,76 +78,27 @@ enum WidgetTimelineLoader {
 
     private static func resolveRoute(
         stations: [Station],
-        coordinate: WidgetCoordinate?,
+        coordinate: StationCoordinate?,
         context: WidgetRouteContext?,
         now: Date
-    ) -> (origin: Station, destination: Station)? {
-        let stationMap = Dictionary(uniqueKeysWithValues: stations.map { ($0.id, $0) })
-        let locatedOrigin = coordinate.flatMap { nearestStation(to: $0, stations: stations) }
-        let fallbackOrigin = context.flatMap {
-            stationMap[$0.cachedOriginID] ?? stationMap[$0.originID]
-        }
-        guard let origin = preferredTaipeiStation(for: locatedOrigin ?? fallbackOrigin, stations: stations) else {
+    ) -> StationChoice.Route? {
+        guard let context else {
             return nil
         }
 
-        let savedDestination = context.flatMap { stationMap[$0.destinationID] }
-        let destination: Station?
-
-        if context?.originID == origin.id,
-           savedDestination?.id != origin.id {
-            destination = savedDestination
-        } else if let context {
-            let predictedID = DestinationAutofill.autoFillDestinationID(
-                originId: origin.id,
-                recordsData: context.frequentDestinationRecordsData,
-                legacyDestinationIDs: context.legacyDestinationIDs,
-                stations: stations,
-                now: now
-            )
-            destination = stationMap[predictedID] ?? savedDestination
-        } else {
-            destination = savedDestination
-        }
-
-        guard let destination, destination.id != origin.id else {
-            return nil
-        }
-
-        return (origin, destination)
-    }
-
-    private static func nearestStation(
-        to coordinate: WidgetCoordinate,
-        stations: [Station]
-    ) -> Station? {
-        let userLocation = CLLocation(
-            latitude: coordinate.latitude,
-            longitude: coordinate.longitude
+        return StationChoice(stations: stations).route(
+            context: StationChoice.RouteContext(
+                originID: context.originID,
+                destinationID: context.destinationID,
+                cachedOriginID: context.cachedOriginID,
+                history: StationChoiceHistory(
+                    recordsData: context.frequentDestinationRecordsData,
+                    legacyDestinationIDs: context.legacyDestinationIDs
+                )
+            ),
+            coordinate: coordinate,
+            now: now
         )
-
-        return stations
-            .compactMap { station -> (Station, CLLocationDistance)? in
-                guard let latitude = station.lat, let longitude = station.lon else {
-                    return nil
-                }
-
-                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
-                return (station, userLocation.distance(from: stationLocation))
-            }
-            .min { $0.1 < $1.1 }?
-            .0
-    }
-
-    private static func preferredTaipeiStation(
-        for station: Station?,
-        stations: [Station]
-    ) -> Station? {
-        guard let station, isTaipeiCircularStation(station) else {
-            return station
-        }
-
-        return stations.first { $0.name == "臺北" } ?? station
     }
 
     private static func timelineEntries(
@@ -312,15 +263,10 @@ enum WidgetTimelineLoader {
     }
 }
 
-private struct WidgetCoordinate: Sendable {
-    let latitude: Double
-    let longitude: Double
-}
-
 @MainActor
 private final class WidgetLocationRequest: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<WidgetCoordinate?, Never>?
+    private var continuation: CheckedContinuation<StationCoordinate?, Never>?
     private var timeoutTask: Task<Void, Never>?
 
     override init() {
@@ -329,7 +275,7 @@ private final class WidgetLocationRequest: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
     }
 
-    func fetch() async -> WidgetCoordinate? {
+    func fetch() async -> StationCoordinate? {
         guard manager.isAuthorizedForWidgetUpdates else {
             return nil
         }
@@ -353,7 +299,7 @@ private final class WidgetLocationRequest: NSObject, CLLocationManagerDelegate {
         }
 
         Task { @MainActor [weak self] in
-            self?.finish(with: WidgetCoordinate(
+            self?.finish(with: StationCoordinate(
                 latitude: coordinate.latitude,
                 longitude: coordinate.longitude
             ))
@@ -366,7 +312,7 @@ private final class WidgetLocationRequest: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    private func finish(with coordinate: WidgetCoordinate?) {
+    private func finish(with coordinate: StationCoordinate?) {
         timeoutTask?.cancel()
         timeoutTask = nil
         continuation?.resume(returning: coordinate)
