@@ -17,3 +17,6 @@ _Avoid_: Route selection state
 **Schedule**:
 The trains serving one Route on a railway operating date, together with the current availability of timetable and live-running data.
 _Avoid_: Train list
+
+**Widget snapshot**:
+A saved view of a Route and its selected upcoming trains, suitable for display when the app is not active.
