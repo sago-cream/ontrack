@@ -25,3 +25,11 @@ xcrun swiftc \
     -o "$TEST_BUILD_DIR/schedule-acquisition-tests"
 
 "$TEST_BUILD_DIR/schedule-acquisition-tests"
+
+xcrun swiftc \
+    "$IOS_ROOT_DIR/apps/ios/OnTrack/Models.swift" \
+    "$IOS_ROOT_DIR/apps/ios/Shared/WidgetSnapshot.swift" \
+    "$IOS_ROOT_DIR/apps/ios/Tests/WidgetSnapshotProjectionTests.swift" \
+    -o "$TEST_BUILD_DIR/widget-snapshot-projection-tests"
+
+"$TEST_BUILD_DIR/widget-snapshot-projection-tests"

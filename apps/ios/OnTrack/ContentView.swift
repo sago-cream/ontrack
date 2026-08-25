@@ -105,7 +105,8 @@ struct ContentView: View {
     @State private var isLoadingStations = false
     @State private var isLoadingSchedule = false
     @State private var isRefreshingLive = false
-    @State private var widgetLiveDataIsFresh = false
+    @State private var widgetScheduleMeta: ScheduleMeta?
+    @State private var widgetScheduleFetchedAt: Date?
     @State private var errorMessage: String?
     @State private var stationPicker: StationPickerRole?
     @State private var originSource: OriginSelectionSource = .manual
@@ -575,13 +576,14 @@ struct ContentView: View {
                 trains = []
                 allScheduleTrains = []
                 selectedTrain = nil
-                widgetLiveDataIsFresh = false
+                widgetScheduleMeta = nil
+                widgetScheduleFetchedAt = nil
                 WidgetSnapshotStore.clear()
                 return
             }
 
-            widgetLiveDataIsFresh = response.meta?.liveDataStatus == .fresh
-                && (response.meta?.liveDataAgeSeconds ?? 0) <= 15 * 60
+            widgetScheduleMeta = response.meta
+            widgetScheduleFetchedAt = Date()
             let display = TrainDisplay.displaySchedule(
                 trains: electronicTicketOnly
                     ? response.trains.filter(\.supportsElectronicTicket)
@@ -603,7 +605,8 @@ struct ContentView: View {
             trains = []
             allScheduleTrains = []
             selectedTrain = nil
-            widgetLiveDataIsFresh = false
+            widgetScheduleMeta = nil
+            widgetScheduleFetchedAt = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -656,47 +659,23 @@ struct ContentView: View {
             messageTemplate: messageTemplate
         ))
 
-        let widgetTrain = TrainInfo(
-            trainNo: train.trainNo,
-            trainType: train.trainType,
-            direction: train.direction,
-            originStation: train.originStation,
-            destinationStation: train.destinationStation,
-            departureTime: train.departureTime,
-            arrivalTime: train.arrivalTime,
-            tripLine: train.tripLine,
-            price: train.price,
-            delay: widgetLiveDataIsFresh ? train.delay : nil,
-            status: widgetLiveDataIsFresh ? train.status : .unknown
-        )
-        let primaryTrain = WidgetTrainSnapshot(
-            train: train,
-            liveDataIsFresh: widgetLiveDataIsFresh
-        )
-        let trainCards = Array(trains.prefix(3)).map {
-            WidgetTrainSnapshot(
-                train: $0,
-                liveDataIsFresh: widgetLiveDataIsFresh
+        let projectedAt = Date()
+        guard let snapshot = WidgetSnapshotProjection.snapshot(
+            source: .selected(primary: train, cards: Array(trains.prefix(3))),
+            origin: originStation,
+            destination: destinationStation,
+            meta: widgetScheduleMeta,
+            projectedAt: projectedAt,
+            fetchedAt: widgetScheduleFetchedAt ?? projectedAt,
+            message: WidgetSnapshotProjection.MessageSettings(
+                template: messageTemplate,
+                legacyFormatRaw: messageFormatRaw
             )
+        ) else {
+            return
         }
 
-        WidgetSnapshotStore.save(WidgetSnapshot(
-            trainIdentifier: primaryTrain.trainIdentifier,
-            departureTime: primaryTrain.departureTime,
-            arrivalTime: primaryTrain.arrivalTime,
-            originName: originStation.displayName,
-            destinationName: destinationStation.displayName,
-            delayMinutes: primaryTrain.delayMinutes,
-            shareMessage: ShareMessageTemplate.message(
-                template: messageTemplate,
-                legacyFormatRaw: messageFormatRaw,
-                train: widgetTrain,
-                origin: originStation,
-                destination: destinationStation
-            ),
-            updatedAt: Date(),
-            trainCards: trainCards
-        ))
+        WidgetSnapshotStore.save(snapshot)
     }
 
     private func select(station: Station, for role: StationPickerRole) {
