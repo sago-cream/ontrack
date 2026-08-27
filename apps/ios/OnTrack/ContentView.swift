@@ -308,6 +308,7 @@ struct ContentView: View {
                             ))
                             .frame(maxWidth: .infinity)
                         }
+                        .scrollDisabled(true)
                         .scrollIndicators(.hidden)
 
                         if stationPicker == nil {
