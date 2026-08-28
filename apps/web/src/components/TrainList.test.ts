@@ -43,7 +43,7 @@ describe('train list display selection', () => {
         expect(result.recommendedTrain?.trainNo).toBe('104');
     });
 
-    test('orders and selects trains by arrival time in arrival mode', () => {
+    test('selects the latest train that arrives by the requested time', () => {
         const trains = [
             train('101', '09:00', '11:00'),
             train('102', '09:10', '10:30'),
@@ -54,11 +54,23 @@ describe('train list display selection', () => {
         const result = buildDisplayState(trains, '10:40', 'arrival');
 
         expect(result.displayTrains.map(({ trainNo }) => trainNo)).toEqual([
+            '102',
             '103',
             '101',
-            '104',
         ]);
-        expect(result.recommendedTrain?.trainNo).toBe('103');
+        expect(result.recommendedTrain?.trainNo).toBe('102');
+    });
+
+    test('falls back to the earliest train when none arrive by the requested time', () => {
+        const trains = [
+            train('101', '09:00', '11:00'),
+            train('102', '09:10', '10:30'),
+            train('103', '09:20', '10:45'),
+        ];
+
+        const result = buildDisplayState(trains, '10:00', 'arrival');
+
+        expect(result.recommendedTrain?.trainNo).toBe('102');
     });
 
     test('keeps the last three trains when none remain catchable', () => {
