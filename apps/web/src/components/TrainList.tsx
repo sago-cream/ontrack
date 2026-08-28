@@ -121,15 +121,24 @@ export function buildDisplayState(
             firstLateArrivalIndex === -1
                 ? orderedTrains.length - 1
                 : firstLateArrivalIndex - 1;
-        const recommendedIndex = Math.max(0, latestArrivalIndex);
+        if (latestArrivalIndex === -1) {
+            const displayTrains = orderedTrains.slice(0, 3);
+
+            return {
+                displayTrains,
+                recommendedTrain: displayTrains[0] ?? null,
+            };
+        }
+
+        const start = Math.max(0, latestArrivalIndex - 2);
         const displayTrains = orderedTrains.slice(
-            recommendedIndex,
-            recommendedIndex + 3
+            start,
+            latestArrivalIndex + 1
         );
 
         return {
             displayTrains,
-            recommendedTrain: displayTrains[0] ?? null,
+            recommendedTrain: displayTrains[displayTrains.length - 1] ?? null,
         };
     }
     const nextCatchableTrainIndex = orderedTrains.findIndex(

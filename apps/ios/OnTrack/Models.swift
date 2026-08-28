@@ -317,16 +317,19 @@ enum TrainDisplay {
             let latestArrivalIndex = orderedTrains.lastIndex {
                 comparisonMinutes($0) <= targetMinutes
             }
-            let recommendedIndex = latestArrivalIndex ?? orderedTrains.startIndex
-            guard orderedTrains.indices.contains(recommendedIndex) else {
-                return DisplaySchedule(trains: [], recommendedTrain: nil)
+            guard let latestArrivalIndex else {
+                let displayTrains = Array(orderedTrains.prefix(3))
+                return DisplaySchedule(
+                    trains: displayTrains,
+                    recommendedTrain: displayTrains.first
+                )
             }
-            let end = min(orderedTrains.endIndex, recommendedIndex + 3)
-            let displayTrains = Array(orderedTrains[recommendedIndex..<end])
+            let start = max(orderedTrains.startIndex, latestArrivalIndex - 2)
+            let displayTrains = Array(orderedTrains[start...latestArrivalIndex])
 
             return DisplaySchedule(
                 trains: displayTrains,
-                recommendedTrain: displayTrains.first
+                recommendedTrain: displayTrains.last
             )
         }
         let nextCatchableIndex = orderedTrains.firstIndex {

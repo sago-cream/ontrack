@@ -55,10 +55,26 @@ describe('train list display selection', () => {
 
         expect(result.displayTrains.map(({ trainNo }) => trainNo)).toEqual([
             '102',
-            '103',
-            '101',
         ]);
         expect(result.recommendedTrain?.trainNo).toBe('102');
+    });
+
+    test('shows the latest three trains that arrive by the requested time', () => {
+        const trains = [
+            train('104', '09:30', '10:30'),
+            train('101', '09:00', '10:00'),
+            train('103', '09:20', '10:20'),
+            train('102', '09:10', '10:10'),
+        ];
+
+        const result = buildDisplayState(trains, '10:30', 'arrival');
+
+        expect(result.displayTrains.map(({ trainNo }) => trainNo)).toEqual([
+            '102',
+            '103',
+            '104',
+        ]);
+        expect(result.recommendedTrain?.trainNo).toBe('104');
     });
 
     test('falls back to the earliest train when none arrive by the requested time', () => {
@@ -70,6 +86,11 @@ describe('train list display selection', () => {
 
         const result = buildDisplayState(trains, '10:00', 'arrival');
 
+        expect(result.displayTrains.map(({ trainNo }) => trainNo)).toEqual([
+            '102',
+            '103',
+            '101',
+        ]);
         expect(result.recommendedTrain?.trainNo).toBe('102');
     });
 
