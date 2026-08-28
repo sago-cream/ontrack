@@ -112,8 +112,37 @@ export function buildDisplayState(
     const orderedTrains = [...trains].sort(
         (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
     );
+
+    if (timeMode === 'arrival') {
+        const firstLateArrivalIndex = orderedTrains.findIndex(
+            (train) => getComparisonMinutes(train) > targetTimeMinutes
+        );
+        const latestArrivalIndex =
+            firstLateArrivalIndex === -1
+                ? orderedTrains.length - 1
+                : firstLateArrivalIndex - 1;
+        if (latestArrivalIndex === -1) {
+            const displayTrains = orderedTrains.slice(0, 3);
+
+            return {
+                displayTrains,
+                recommendedTrain: displayTrains[0] ?? null,
+            };
+        }
+
+        const start = Math.max(0, latestArrivalIndex - 2);
+        const displayTrains = orderedTrains.slice(
+            start,
+            latestArrivalIndex + 1
+        );
+
+        return {
+            displayTrains,
+            recommendedTrain: displayTrains[displayTrains.length - 1] ?? null,
+        };
+    }
     const nextCatchableTrainIndex = orderedTrains.findIndex(
-        (train) => getComparisonMinutes(train) >= targetTimeMinutes
+        (train) => getEffectiveDepartureMinutes(train) >= targetTimeMinutes
     );
 
     let displayTrains: TrainInfo[] = [];
