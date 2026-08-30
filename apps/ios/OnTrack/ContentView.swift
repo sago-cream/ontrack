@@ -1061,7 +1061,6 @@ private struct TimeEditorSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: TimeSelection
-    @State private var bottomSafeAreaInset: CGFloat = 0
 
     private var modeSelection: Binding<TimeMode> {
         Binding(
@@ -1133,8 +1132,6 @@ private struct TimeEditorSheet: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let measuredBottomSafeAreaInset = max(0, proxy.safeAreaInsets.bottom)
-
             content(availableWidth: proxy.size.width)
                 .frame(height: Self.detentHeight, alignment: .top)
                 .background(OnTrackTheme.panel)
@@ -1144,16 +1141,9 @@ private struct TimeEditorSheet: View {
                         style: .continuous
                     )
                 )
-                .padding(.bottom, measuredBottomSafeAreaInset)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
-                .onAppear {
-                    bottomSafeAreaInset = measuredBottomSafeAreaInset
-                }
-                .onChange(of: measuredBottomSafeAreaInset) { _, inset in
-                    bottomSafeAreaInset = inset
-                }
         }
-        .presentationDetents([.height(Self.detentHeight + bottomSafeAreaInset)])
+        .presentationDetents([.height(Self.detentHeight)])
         .presentationDragIndicator(.automatic)
         .presentationBackground(.clear)
     }
