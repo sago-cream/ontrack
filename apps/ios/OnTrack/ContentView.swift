@@ -1041,6 +1041,7 @@ private struct TimeSelectorView: View {
 }
 
 private struct TimeEditorSheet: View {
+    private static let panelCornerRadius: CGFloat = 32
     private static let pickerHeight: CGFloat = 216
 
     private static var footerButtonHeight: CGFloat {
@@ -1137,6 +1138,12 @@ private struct TimeEditorSheet: View {
             content(availableWidth: proxy.size.width)
                 .frame(height: Self.detentHeight, alignment: .top)
                 .background(OnTrackTheme.panel)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: Self.panelCornerRadius,
+                        style: .continuous
+                    )
+                )
                 .padding(.bottom, measuredBottomSafeAreaInset)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
                 .onAppear {
