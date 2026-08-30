@@ -1060,6 +1060,7 @@ private struct TimeEditorSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var draft: TimeSelection
+    @State private var bottomSafeAreaInset: CGFloat = 0
 
     private var modeSelection: Binding<TimeMode> {
         Binding(
@@ -1131,18 +1132,26 @@ private struct TimeEditorSheet: View {
 
     var body: some View {
         GeometryReader { proxy in
-            content(
-                availableWidth: proxy.size.width,
-                bottomSafeAreaInset: max(0, proxy.safeAreaInsets.bottom)
-            )
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            let measuredBottomSafeAreaInset = max(0, proxy.safeAreaInsets.bottom)
+
+            content(availableWidth: proxy.size.width)
+                .frame(height: Self.detentHeight, alignment: .top)
+                .background(OnTrackTheme.panel)
+                .padding(.bottom, measuredBottomSafeAreaInset)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
+                .onAppear {
+                    bottomSafeAreaInset = measuredBottomSafeAreaInset
+                }
+                .onChange(of: measuredBottomSafeAreaInset) { _, inset in
+                    bottomSafeAreaInset = inset
+                }
         }
-        .presentationDetents([.height(Self.detentHeight)])
+        .presentationDetents([.height(Self.detentHeight + bottomSafeAreaInset)])
         .presentationDragIndicator(.automatic)
-        .presentationBackground(OnTrackTheme.panel)
+        .presentationBackground(.clear)
     }
 
-    private func content(availableWidth: CGFloat, bottomSafeAreaInset: CGFloat) -> some View {
+    private func content(availableWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
             timeEditorHeader(availableWidth: availableWidth)
                 .padding(.horizontal, OnTrackTheme.space5)
@@ -1152,9 +1161,8 @@ private struct TimeEditorSheet: View {
                 .padding(.horizontal, OnTrackTheme.space5)
                 .padding(.top, OnTrackTheme.space3)
 
-            timeEditorFooter(bottomSafeAreaInset: bottomSafeAreaInset)
+            timeEditorFooter
         }
-        .background(OnTrackTheme.panel)
     }
 
     private func timeEditorHeader(availableWidth: CGFloat) -> some View {
@@ -1230,35 +1238,28 @@ private struct TimeEditorSheet: View {
         .tint(OnTrackTheme.primary)
     }
 
-    private func timeEditorFooter(bottomSafeAreaInset: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Button(AppText.cancel) {
-                    dismiss()
-                }
-                .font(OnTrackFont.action)
-                .foregroundStyle(OnTrackTheme.text)
-                .frame(maxWidth: .infinity)
-                .frame(height: Self.footerButtonHeight)
-
-                Rectangle()
-                    .fill(OnTrackTheme.border)
-                    .frame(width: 1, height: Self.footerButtonHeight)
-
-                Button(AppText.done) {
-                    selection = draft.mode == .now ? .current(mode: .now) : draft
-                    dismiss()
-                }
-                .font(OnTrackFont.action)
-                .foregroundStyle(OnTrackTheme.primary)
-                .frame(maxWidth: .infinity)
-                .frame(height: Self.footerButtonHeight)
+    private var timeEditorFooter: some View {
+        HStack(spacing: 0) {
+            Button(AppText.cancel) {
+                dismiss()
             }
+            .font(OnTrackFont.action)
+            .foregroundStyle(OnTrackTheme.text)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.footerButtonHeight)
 
-            if bottomSafeAreaInset > 0 {
-                Color.clear
-                    .frame(height: bottomSafeAreaInset)
+            Rectangle()
+                .fill(OnTrackTheme.border)
+                .frame(width: 1, height: Self.footerButtonHeight)
+
+            Button(AppText.done) {
+                selection = draft.mode == .now ? .current(mode: .now) : draft
+                dismiss()
             }
+            .font(OnTrackFont.action)
+            .foregroundStyle(OnTrackTheme.primary)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.footerButtonHeight)
         }
         .background(OnTrackTheme.panel)
     }
