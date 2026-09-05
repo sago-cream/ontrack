@@ -576,11 +576,6 @@ export async function ensureRouteTimetable(
     return routeTimetables;
 }
 
-export async function getLiveBoard(env: Env) {
-    const snapshot = await getSnapshot<DelaySnapshot>(env, LIVE_BOARD_KEY);
-    return snapshot?.data ?? refreshLiveBoard(env);
-}
-
 export async function refreshDailySnapshots(env: Env) {
     const today = getTaipeiDate();
     const tomorrow = getNextTaipeiDate();
