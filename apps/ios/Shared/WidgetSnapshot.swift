@@ -8,7 +8,7 @@ struct WidgetTrainSnapshot: Codable, Equatable {
     let delayMinutes: Int?
     let price: String?
 
-    init(train: TrainInfo, liveDataIsFresh: Bool) {
+    fileprivate init(train: TrainInfo, liveDataIsFresh: Bool) {
         let delay = liveDataIsFresh ? train.delay : nil
         trainIdentifier = [
             "\(TrainDisplay.trainType(train.trainType)) \(train.trainNo)",
@@ -22,7 +22,7 @@ struct WidgetTrainSnapshot: Codable, Equatable {
         price = TrainDisplay.price(train.price)
     }
 
-    init(
+    fileprivate init(
         trainIdentifier: String,
         departureTime: String,
         arrivalTime: String,
@@ -36,7 +36,7 @@ struct WidgetTrainSnapshot: Codable, Equatable {
         self.price = price
     }
 
-    func removingLiveStatus() -> WidgetTrainSnapshot {
+    fileprivate func removingLiveStatus() -> WidgetTrainSnapshot {
         WidgetTrainSnapshot(
             trainIdentifier: trainIdentifier,
             departureTime: departureTime,
@@ -58,7 +58,7 @@ struct WidgetSnapshot: Codable, Equatable {
     let updatedAt: Date
     let trainCards: [WidgetTrainSnapshot]?
 
-    init(
+    fileprivate init(
         trainIdentifier: String,
         departureTime: String,
         arrivalTime: String,
@@ -104,6 +104,139 @@ struct WidgetSnapshot: Codable, Equatable {
                 price: nil
             ),
         ]
+    }
+}
+
+struct WidgetSnapshotProjection {
+    enum TrainSource {
+        case selected(primary: TrainInfo, cards: [TrainInfo])
+        case recommended(trains: [TrainInfo], targetTime: String, timeMode: TimeMode)
+    }
+
+    struct MessageSettings {
+        let template: String
+        let legacyFormatRaw: String
+    }
+
+    private static let liveDataFreshnessLimit = 15 * 60
+
+    static func snapshot(
+        source: TrainSource,
+        origin: Station,
+        destination: Station,
+        meta: ScheduleMeta?,
+        projectedAt: Date,
+        fetchedAt: Date,
+        message: MessageSettings
+    ) -> WidgetSnapshot? {
+        let liveDataIsFresh = isLiveDataFresh(
+            meta,
+            projectedAt: projectedAt,
+            fetchedAt: fetchedAt
+        )
+        let selection: (primary: TrainInfo, cards: [TrainInfo])?
+
+        switch source {
+        case let .selected(primary, cards):
+            selection = (
+                sanitized(primary, liveDataIsFresh: liveDataIsFresh),
+                cards.map { sanitized($0, liveDataIsFresh: liveDataIsFresh) }
+            )
+        case let .recommended(trains, targetTime, timeMode):
+            let usableTrains = trains
+                .filter { $0.status != .cancelled }
+                .map { sanitized($0, liveDataIsFresh: liveDataIsFresh) }
+            let display = TrainDisplay.displaySchedule(
+                trains: usableTrains,
+                targetTime: targetTime,
+                timeMode: timeMode
+            )
+            selection = display.recommendedTrain.map {
+                ($0, Array(display.trains.prefix(3)))
+            }
+        }
+
+        guard let selection else {
+            return nil
+        }
+
+        let primaryTrain = WidgetTrainSnapshot(
+            train: selection.primary,
+            liveDataIsFresh: liveDataIsFresh
+        )
+        let trainCards = selection.cards.prefix(3).map {
+            WidgetTrainSnapshot(train: $0, liveDataIsFresh: liveDataIsFresh)
+        }
+
+        return WidgetSnapshot(
+            trainIdentifier: primaryTrain.trainIdentifier,
+            departureTime: primaryTrain.departureTime,
+            arrivalTime: primaryTrain.arrivalTime,
+            originName: origin.displayName,
+            destinationName: destination.displayName,
+            delayMinutes: primaryTrain.delayMinutes,
+            shareMessage: ShareMessageTemplate.message(
+                template: message.template,
+                legacyFormatRaw: message.legacyFormatRaw,
+                train: selection.primary,
+                origin: origin,
+                destination: destination
+            ),
+            updatedAt: fetchedAt,
+            trainCards: trainCards
+        )
+    }
+
+    static func storedSnapshot(_ snapshot: WidgetSnapshot?, displayedAt: Date) -> WidgetSnapshot? {
+        guard let snapshot else {
+            return nil
+        }
+
+        guard displayedAt.timeIntervalSince(snapshot.updatedAt) > TimeInterval(liveDataFreshnessLimit) else {
+            return snapshot
+        }
+
+        return WidgetSnapshot(
+            trainIdentifier: snapshot.trainIdentifier,
+            departureTime: snapshot.departureTime,
+            arrivalTime: snapshot.arrivalTime,
+            originName: snapshot.originName,
+            destinationName: snapshot.destinationName,
+            delayMinutes: nil,
+            shareMessage: snapshot.shareMessage,
+            updatedAt: snapshot.updatedAt,
+            trainCards: snapshot.trainCards?.map { $0.removingLiveStatus() }
+        )
+    }
+
+    private static func isLiveDataFresh(
+        _ meta: ScheduleMeta?,
+        projectedAt: Date,
+        fetchedAt: Date
+    ) -> Bool {
+        guard meta?.liveDataStatus == .fresh else {
+            return false
+        }
+
+        let initialAge = max(0, meta?.liveDataAgeSeconds ?? 0)
+        let elapsed = max(0, Int(projectedAt.timeIntervalSince(fetchedAt)))
+        return initialAge + elapsed <= liveDataFreshnessLimit
+    }
+
+    private static func sanitized(_ train: TrainInfo, liveDataIsFresh: Bool) -> TrainInfo {
+        TrainInfo(
+            trainNo: train.trainNo,
+            trainType: train.trainType,
+            direction: train.direction,
+            originStation: train.originStation,
+            destinationStation: train.destinationStation,
+            departureTime: train.departureTime,
+            arrivalTime: train.arrivalTime,
+            tripLine: train.tripLine,
+            price: train.price,
+            delay: liveDataIsFresh ? train.delay : nil,
+            status: liveDataIsFresh ? train.status : .unknown
+        )
     }
 }
 

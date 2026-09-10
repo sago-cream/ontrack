@@ -88,13 +88,6 @@ struct Station: Decodable, Identifiable, Hashable {
     }
 }
 
-func isTaipeiCircularStation(_ station: Station) -> Bool {
-    station.name
-        .replacingOccurrences(of: "台", with: "臺")
-        .replacingOccurrences(of: #"[\s()（）-]"#, with: "", options: .regularExpression)
-        == "臺北環島"
-}
-
 struct TrainInfo: Decodable, Identifiable {
     let trainNo: String
     let trainType: String
@@ -304,14 +297,6 @@ enum TrainDisplay {
 
     static func displaySchedule(trains: [TrainInfo], targetTime: String, timeMode: TimeMode) -> DisplaySchedule {
         let targetMinutes = timeToMinutes(targetTime)
-        let scheduledMinutes: (TrainInfo) -> Int = { train in
-            switch timeMode {
-            case .now, .departure, .lastTrain:
-                timeToMinutes(train.departureTime)
-            case .arrival:
-                timeToMinutes(train.arrivalTime)
-            }
-        }
         let comparisonMinutes: (TrainInfo) -> Int = { train in
             switch timeMode {
             case .now, .departure, .lastTrain:
@@ -320,15 +305,35 @@ enum TrainDisplay {
                 timeToMinutes(train.arrivalTime)
             }
         }
-        let orderedTrains = timeMode == .arrival
-            ? trains.sorted { scheduledMinutes($0) < scheduledMinutes($1) }
-            : trains
+        let orderedTrains = trains.enumerated()
+            .sorted { lhs, rhs in
+                let lhsMinutes = comparisonMinutes(lhs.element)
+                let rhsMinutes = comparisonMinutes(rhs.element)
+                return lhsMinutes == rhsMinutes ? lhs.offset < rhs.offset : lhsMinutes < rhsMinutes
+            }
+            .map(\.element)
 
-        let nextScheduledIndex = orderedTrains.firstIndex {
-            scheduledMinutes($0) >= targetMinutes
+        if timeMode == .arrival {
+            let latestArrivalIndex = orderedTrains.lastIndex {
+                comparisonMinutes($0) <= targetMinutes
+            }
+            guard let latestArrivalIndex else {
+                let displayTrains = Array(orderedTrains.prefix(3))
+                return DisplaySchedule(
+                    trains: displayTrains,
+                    recommendedTrain: displayTrains.first
+                )
+            }
+            let start = max(orderedTrains.startIndex, latestArrivalIndex - 2)
+            let displayTrains = Array(orderedTrains[start...latestArrivalIndex])
+
+            return DisplaySchedule(
+                trains: displayTrains,
+                recommendedTrain: displayTrains.last
+            )
         }
         let nextCatchableIndex = orderedTrains.firstIndex {
-            comparisonMinutes($0) >= targetMinutes
+            timeToMinutes($0.departureTime) + ($0.delay ?? 0) >= targetMinutes
         }
 
         guard let nextCatchableIndex else {
@@ -336,14 +341,12 @@ enum TrainDisplay {
             return DisplaySchedule(trains: displayTrains, recommendedTrain: displayTrains.last)
         }
 
-        let start = max(0, nextCatchableIndex - 1)
-        let minimumEnd = start + 3
-        let scheduledContextEnd = nextScheduledIndex.map { $0 + 2 } ?? minimumEnd
-        let end = min(orderedTrains.count, max(minimumEnd, scheduledContextEnd))
+        let end = min(orderedTrains.count, nextCatchableIndex + 3)
+        let displayTrains = Array(orderedTrains[nextCatchableIndex..<end])
 
         return DisplaySchedule(
-            trains: Array(orderedTrains[start..<end]),
-            recommendedTrain: orderedTrains[nextCatchableIndex]
+            trains: displayTrains,
+            recommendedTrain: displayTrains.first
         )
     }
 

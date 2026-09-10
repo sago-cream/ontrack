@@ -105,26 +105,44 @@ export function buildDisplayState(
     timeMode: TimeMode
 ) {
     const targetTimeMinutes = timeToMinutes(targetTime);
-    const getScheduledMinutes =
-        timeMode === 'arrival'
-            ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
-            : (train: TrainInfo) => timeToMinutes(train.departureTime);
     const getComparisonMinutes =
         timeMode === 'arrival'
             ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
             : getEffectiveDepartureMinutes;
-    const orderedTrains =
-        timeMode === 'arrival'
-            ? [...trains].sort(
-                  (a, b) => getScheduledMinutes(a) - getScheduledMinutes(b)
-              )
-            : trains;
-
-    const nextScheduledTrainIndex = orderedTrains.findIndex(
-        (train) => getScheduledMinutes(train) >= targetTimeMinutes
+    const orderedTrains = [...trains].sort(
+        (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
     );
+
+    if (timeMode === 'arrival') {
+        const firstLateArrivalIndex = orderedTrains.findIndex(
+            (train) => getComparisonMinutes(train) > targetTimeMinutes
+        );
+        const latestArrivalIndex =
+            firstLateArrivalIndex === -1
+                ? orderedTrains.length - 1
+                : firstLateArrivalIndex - 1;
+        if (latestArrivalIndex === -1) {
+            const displayTrains = orderedTrains.slice(0, 3);
+
+            return {
+                displayTrains,
+                recommendedTrain: displayTrains[0] ?? null,
+            };
+        }
+
+        const start = Math.max(0, latestArrivalIndex - 2);
+        const displayTrains = orderedTrains.slice(
+            start,
+            latestArrivalIndex + 1
+        );
+
+        return {
+            displayTrains,
+            recommendedTrain: displayTrains[displayTrains.length - 1] ?? null,
+        };
+    }
     const nextCatchableTrainIndex = orderedTrains.findIndex(
-        (train) => getComparisonMinutes(train) >= targetTimeMinutes
+        (train) => getEffectiveDepartureMinutes(train) >= targetTimeMinutes
     );
 
     let displayTrains: TrainInfo[] = [];
@@ -134,16 +152,11 @@ export function buildDisplayState(
         displayTrains = orderedTrains.slice(-3);
         recommendedTrain = displayTrains[displayTrains.length - 1] ?? null;
     } else {
-        const start = Math.max(0, nextCatchableTrainIndex - 1);
-        const minimumEnd = start + 3;
-        const scheduledContextEnd =
-            nextScheduledTrainIndex === -1
-                ? minimumEnd
-                : nextScheduledTrainIndex + 2;
-        const end = Math.max(minimumEnd, scheduledContextEnd);
-
-        displayTrains = orderedTrains.slice(start, end);
-        recommendedTrain = orderedTrains[nextCatchableTrainIndex] ?? null;
+        displayTrains = orderedTrains.slice(
+            nextCatchableTrainIndex,
+            nextCatchableTrainIndex + 3
+        );
+        recommendedTrain = displayTrains[0] ?? null;
     }
 
     return { displayTrains, recommendedTrain };

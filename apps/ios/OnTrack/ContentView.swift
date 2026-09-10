@@ -2,9 +2,7 @@ import CoreLocation
 import SwiftUI
 import UIKit
 
-private let taipeiMainStationName = "臺北"
 private let scheduleRefreshInterval: TimeInterval = 5 * 60
-private let scheduleWarmupRetryDelayNanos: UInt64 = 4_000_000_000
 private let locationRefreshInterval: TimeInterval = 2 * 60
 private let manualOriginProtectionInterval: TimeInterval = 10 * 60
 private let stationHistoryLimit = 24
@@ -107,7 +105,8 @@ struct ContentView: View {
     @State private var isLoadingStations = false
     @State private var isLoadingSchedule = false
     @State private var isRefreshingLive = false
-    @State private var widgetLiveDataIsFresh = false
+    @State private var widgetScheduleMeta: ScheduleMeta?
+    @State private var widgetScheduleFetchedAt: Date?
     @State private var errorMessage: String?
     @State private var stationPicker: StationPickerRole?
     @State private var originSource: OriginSelectionSource = .manual
@@ -131,6 +130,17 @@ struct ContentView: View {
         Dictionary(uniqueKeysWithValues: stations.map { ($0.id, $0) })
     }
 
+    private var stationChoice: StationChoice {
+        StationChoice(stations: stations)
+    }
+
+    private var stationChoiceHistory: StationChoiceHistory {
+        StationChoiceHistory(
+            recordsData: frequentDestinationRecordsData,
+            legacyDestinationIDs: legacyRecentDestinationIDs
+        )
+    }
+
     private var originStation: Station? {
         stationMap[originId]
     }
@@ -140,22 +150,14 @@ struct ContentView: View {
     }
 
     private var algorithmicDestinationStations: [Station] {
-        DestinationAutofill.rankedDestinationIDs(
-            originId: originId,
-            excludedId: originId,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs,
-            stations: stations
+        stationChoice.destinationRecommendations(
+            originID: originId,
+            history: stationChoiceHistory
         )
-        .compactMap { stationMap[$0] }
     }
 
     private var destinationHistoryStations: [Station] {
-        DestinationAutofill.historyDestinationIDs(
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs
-        )
-        .compactMap { stationMap[$0] }
+        stationChoice.destinationHistory(stationChoiceHistory)
     }
 
     private var algorithmicOriginStations: [Station] {
@@ -163,18 +165,7 @@ struct ContentView: View {
             return []
         }
 
-        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return stations
-            .compactMap { station -> (station: Station, distance: CLLocationDistance)? in
-                guard let latitude = station.lat, let longitude = station.lon else {
-                    return nil
-                }
-
-                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
-                return (station, userLocation.distance(from: stationLocation))
-            }
-            .sorted { $0.distance < $1.distance }
-            .map(\.station)
+        return stationChoice.nearbyStations(to: coordinate)
     }
 
     private var originHistoryStations: [Station] {
@@ -212,6 +203,7 @@ struct ContentView: View {
         [
             originId,
             destinationId,
+            canLoadSchedule ? "ready" : "waiting",
             timeSelection.mode.rawValue,
             Formatters.scheduleDate.string(from: timeSelection.date),
             Formatters.displayTime.string(from: timeSelection.date),
@@ -316,6 +308,7 @@ struct ContentView: View {
                             ))
                             .frame(maxWidth: .infinity)
                         }
+                        .scrollDisabled(true)
                         .scrollIndicators(.hidden)
 
                         if stationPicker == nil {
@@ -383,6 +376,9 @@ struct ContentView: View {
                 WidgetAppearanceStore.save(rawValue: rawValue)
             }
             .task(id: scheduleTaskID) {
+                trains = []
+                allScheduleTrains = []
+                selectedTrain = nil
                 await loadSchedule()
             }
             .onReceive(scheduleRefreshTimer) { _ in
@@ -568,37 +564,27 @@ struct ContentView: View {
         }
 
         do {
-            var response: ScheduleResponse?
-            for attempt in 0..<3 {
-                let candidate = try await APIClient.shared.schedule(
+            let response = try await ScheduleAcquisition().load(
+                route: StationChoice.Route(
                     origin: originStation,
-                    destination: destinationStation,
-                    date: timeSelection.scheduleDate,
-                    refreshLive: refreshLive && attempt == 0
-                )
-                response = candidate
-
-                guard candidate.meta?.scheduleCacheStatus == .warming, attempt < 2 else {
-                    break
-                }
-
-                try? await Task.sleep(nanoseconds: scheduleWarmupRetryDelayNanos)
-                if Task.isCancelled {
-                    return
-                }
-            }
+                    destination: destinationStation
+                ),
+                date: timeSelection.scheduleDate,
+                intent: .foreground(refreshLive: refreshLive)
+            )
 
             guard let response, response.meta?.scheduleCacheStatus != .warming else {
                 trains = []
                 allScheduleTrains = []
                 selectedTrain = nil
-                widgetLiveDataIsFresh = false
+                widgetScheduleMeta = nil
+                widgetScheduleFetchedAt = nil
                 WidgetSnapshotStore.clear()
                 return
             }
 
-            widgetLiveDataIsFresh = response.meta?.liveDataStatus == .fresh
-                && (response.meta?.liveDataAgeSeconds ?? 0) <= 15 * 60
+            widgetScheduleMeta = response.meta
+            widgetScheduleFetchedAt = Date()
             let display = TrainDisplay.displaySchedule(
                 trains: electronicTicketOnly
                     ? response.trains.filter(\.supportsElectronicTicket)
@@ -620,7 +606,8 @@ struct ContentView: View {
             trains = []
             allScheduleTrains = []
             selectedTrain = nil
-            widgetLiveDataIsFresh = false
+            widgetScheduleMeta = nil
+            widgetScheduleFetchedAt = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -673,47 +660,23 @@ struct ContentView: View {
             messageTemplate: messageTemplate
         ))
 
-        let widgetTrain = TrainInfo(
-            trainNo: train.trainNo,
-            trainType: train.trainType,
-            direction: train.direction,
-            originStation: train.originStation,
-            destinationStation: train.destinationStation,
-            departureTime: train.departureTime,
-            arrivalTime: train.arrivalTime,
-            tripLine: train.tripLine,
-            price: train.price,
-            delay: widgetLiveDataIsFresh ? train.delay : nil,
-            status: widgetLiveDataIsFresh ? train.status : .unknown
-        )
-        let primaryTrain = WidgetTrainSnapshot(
-            train: train,
-            liveDataIsFresh: widgetLiveDataIsFresh
-        )
-        let trainCards = Array(trains.prefix(3)).map {
-            WidgetTrainSnapshot(
-                train: $0,
-                liveDataIsFresh: widgetLiveDataIsFresh
+        let projectedAt = Date()
+        guard let snapshot = WidgetSnapshotProjection.snapshot(
+            source: .selected(primary: train, cards: Array(trains.prefix(3))),
+            origin: originStation,
+            destination: destinationStation,
+            meta: widgetScheduleMeta,
+            projectedAt: projectedAt,
+            fetchedAt: widgetScheduleFetchedAt ?? projectedAt,
+            message: WidgetSnapshotProjection.MessageSettings(
+                template: messageTemplate,
+                legacyFormatRaw: messageFormatRaw
             )
+        ) else {
+            return
         }
 
-        WidgetSnapshotStore.save(WidgetSnapshot(
-            trainIdentifier: primaryTrain.trainIdentifier,
-            departureTime: primaryTrain.departureTime,
-            arrivalTime: primaryTrain.arrivalTime,
-            originName: originStation.displayName,
-            destinationName: destinationStation.displayName,
-            delayMinutes: primaryTrain.delayMinutes,
-            shareMessage: ShareMessageTemplate.message(
-                template: messageTemplate,
-                legacyFormatRaw: messageFormatRaw,
-                train: widgetTrain,
-                origin: originStation,
-                destination: destinationStation
-            ),
-            updatedAt: Date(),
-            trainCards: trainCards
-        ))
+        WidgetSnapshotStore.save(snapshot)
     }
 
     private func select(station: Station, for role: StationPickerRole) {
@@ -749,9 +712,7 @@ struct ContentView: View {
 
         if originId.isEmpty {
             setOrigin(
-                loadedStations.first(where: { $0.name == taipeiMainStationName || $0.name == "台北" })?.id
-                    ?? loadedStations.first?.id
-                    ?? "",
+                StationChoice(stations: loadedStations).defaultOrigin?.id ?? "",
                 source: .manual
             )
         } else if isManualOriginProtected {
@@ -790,23 +751,12 @@ struct ContentView: View {
         locationService.requestLocation()
     }
 
-    private func selectNearestOrigin(to coordinate: UserCoordinate) {
+    private func selectNearestOrigin(to coordinate: StationCoordinate) {
         guard !stations.isEmpty else {
             return
         }
 
-        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        let nearestStation = stations
-            .compactMap { station -> (Station, CLLocationDistance)? in
-                guard let latitude = station.lat, let longitude = station.lon else {
-                    return nil
-                }
-
-                let stationLocation = CLLocation(latitude: latitude, longitude: longitude)
-                return (station, userLocation.distance(from: stationLocation))
-            }
-            .min { $0.1 < $1.1 }?
-            .0
+        let nearestStation = stationChoice.nearbyStations(to: coordinate).first
 
         guard let nearestStation else {
             fallbackToCachedOrigin()
@@ -869,12 +819,12 @@ struct ContentView: View {
             return
         }
 
-        let autoFillDestinationId = DestinationAutofill.autoFillDestinationID(
-            originId: originId,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs,
-            stations: availableStations
-        )
+        let autoFillDestinationId = StationChoice(stations: availableStations)
+            .autoFilledDestination(
+                originID: originId,
+                history: stationChoiceHistory
+            )?
+            .id ?? ""
 
         guard !autoFillDestinationId.isEmpty else {
             destinationId = ""
@@ -886,14 +836,8 @@ struct ContentView: View {
     }
 
     private func resolvePreferredStationId(_ stationId: String, in candidateStations: [Station]? = nil) -> String {
-        let availableStations = candidateStations ?? stations
-        guard let station = availableStations.first(where: { $0.id == stationId }),
-              isTaipeiCircularStation(station)
-        else {
-            return stationId
-        }
-
-        return availableStations.first(where: { $0.name == taipeiMainStationName })?.id ?? stationId
+        StationChoice(stations: candidateStations ?? stations).preferredStation(id: stationId)?.id
+            ?? stationId
     }
 
     private func isKnownStation(_ id: String, in stations: [Station]) -> Bool {
@@ -913,12 +857,11 @@ struct ContentView: View {
             return
         }
 
-        frequentDestinationRecordsData = DestinationAutofill.recordDestination(
-            originId: originId,
-            stationId: id,
-            recordsData: frequentDestinationRecordsData,
-            legacyDestinationIDs: legacyRecentDestinationIDs
-        )
+        frequentDestinationRecordsData = stationChoice.recordingDestination(
+            id,
+            from: originId,
+            history: stationChoiceHistory
+        ).recordsData
         recentDestinationIDs = ""
     }
 
@@ -944,14 +887,9 @@ private enum DestinationSelectionSource {
     case auto
 }
 
-private struct UserCoordinate: Equatable, Sendable {
-    let latitude: Double
-    let longitude: Double
-}
-
 @MainActor
 private final class LocationService: NSObject, ObservableObject, CLLocationManagerDelegate {
-    @Published var coordinate: UserCoordinate?
+    @Published var coordinate: StationCoordinate?
     @Published var locationErrorID: UUID?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published private(set) var isRequesting = false
@@ -1016,7 +954,7 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
             return
         }
 
-        let updatedCoordinate = UserCoordinate(
+        let updatedCoordinate = StationCoordinate(
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude
         )
@@ -1537,8 +1475,8 @@ private struct StationTrigger: View {
                     RouteGlyph(kind: glyph, color: glyphColor)
 
                     if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
+                        SkeletonBar(width: 96, height: 16)
+                            .accessibilityHidden(true)
                     } else {
                         Text(station?.displayName ?? "")
                             .font(OnTrackFont.control)
@@ -1855,115 +1793,13 @@ private struct StationSearchView: View {
         selectedStation?.displayName ?? AppText.searchStation
     }
 
-    private var matchingStations: [Station] {
-        let normalizedSearch = trimmedSearch.replacingOccurrences(of: "台", with: "臺")
-        let normalizedEnglishSearch = normalizedEnglishName(trimmedSearch)
-        let allowsCircularStation = isCircularSearch(trimmedSearch)
-
-        return stations
-            .enumerated()
-            .compactMap { index, station -> RankedStation? in
-                let normalizedStationName = normalizedEnglishName(station.nameEn)
-                let matches = station.name.localizedCaseInsensitiveContains(trimmedSearch)
-                    || station.name.localizedCaseInsensitiveContains(normalizedSearch)
-                    || normalizedStationName.contains(normalizedEnglishSearch)
-                    || station.id.localizedCaseInsensitiveContains(trimmedSearch)
-
-                guard matches, allowsCircularStation || !isTaipeiCircularStation(station) else {
-                    return nil
-                }
-
-                let isExactMatch = station.name == trimmedSearch
-                    || station.name == normalizedSearch
-                    || normalizedStationName == normalizedEnglishSearch
-                let priority = isExactMatch ? 0 : 1
-                return RankedStation(station: station, priority: priority, index: index)
-            }
-            .sorted { lhs, rhs in
-                lhs.priority == rhs.priority ? lhs.index < rhs.index : lhs.priority < rhs.priority
-            }
-            .map(\.station)
-    }
-
-    private var searchMatches: [Station] {
-        guard isSearching else {
-            return []
-        }
-
-        return matchingStations.filter { $0.id != selectedStation?.id }
-    }
-
-    private var visibleAlgorithmicStations: [Station] {
-        let coveredIDs = Set(searchMatches.map(\.id))
-        return algorithmicStations
-            .filter {
-                $0.id != selectedStation?.id
-                    && !coveredIDs.contains($0.id)
-                    && !isTaipeiCircularStation($0)
-            }
-            .prefix(3)
-            .map { $0 }
-    }
-
-    private var visibleHistoryStations: [Station] {
-        let coveredIDs = Set(searchMatches.map(\.id) + visibleAlgorithmicStations.map(\.id))
-        let uncoveredHistory = historyStations.filter {
-            $0.id != selectedStation?.id
-                && !coveredIDs.contains($0.id)
-                && !isTaipeiCircularStation($0)
-        }
-
-        return searchMatches.isEmpty ? uncoveredHistory : Array(uncoveredHistory.prefix(2))
-    }
-
-    private var otherStations: [Station] {
-        let coveredIDs = Set(
-            searchMatches.map(\.id)
-                + visibleAlgorithmicStations.map(\.id)
-                + visibleHistoryStations.map(\.id)
+    private var resultRows: [StationChoice.Suggestion] {
+        StationChoice(stations: stations).suggestions(
+            query: trimmedSearch,
+            selectedID: selectedStation?.id,
+            recommendations: algorithmicStations,
+            history: historyStations
         )
-
-        return stations.filter { station in
-            station.id != selectedStation?.id
-                && !coveredIDs.contains(station.id)
-                && !isTaipeiCircularStation(station)
-        }
-    }
-
-    private var resultRows: [StationSearchResult] {
-        searchMatches.map { StationSearchResult(station: $0, role: .regular) }
-            + visibleAlgorithmicStations.map { StationSearchResult(station: $0, role: .algorithmic) }
-            + visibleHistoryStations.map { StationSearchResult(station: $0, role: .history) }
-            + otherStations.map { StationSearchResult(station: $0, role: .regular) }
-    }
-
-    private func selectedStation(_ station: Station) -> Station {
-        guard isTaipeiCircularStation(station), !isCircularSearch(searchText) else {
-            return station
-        }
-
-        return stations.first(where: { $0.name == taipeiMainStationName }) ?? station
-    }
-
-    private func normalizedEnglishName(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "_", with: " ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-    }
-
-    private func isCircularSearch(_ value: String) -> Bool {
-        let normalizedValue = value
-            .replacingOccurrences(of: "台", with: "臺")
-            .lowercased()
-
-        return normalizedValue.contains("環島")
-            || normalizedValue.contains("circular")
-            || normalizedValue.contains("circle")
-            || normalizedValue.contains("loop")
-            || normalizedValue.contains("round island")
-            || normalizedValue.contains("around island")
-            || normalizedValue.contains("surround island")
     }
 
     private func dismissSearch() {
@@ -1976,10 +1812,9 @@ private struct StationSearchView: View {
 
     private func selectSearchResult(_ station: Station) {
         isSearchFocused = false
-        let resolvedStation = selectedStation(station)
 
         DispatchQueue.main.async {
-            onSelect(resolvedStation)
+            onSelect(station)
         }
     }
 
@@ -2053,7 +1888,7 @@ private struct StationSearchView: View {
                             ForEach(resultRows) { row in
                                 StationSearchRow(
                                     station: row.station,
-                                    role: row.role
+                                    kind: row.kind
                                 ) {
                                     selectSearchResult(row.station)
                                 }
@@ -2078,26 +1913,7 @@ private struct StationSearchView: View {
     }
 }
 
-private struct StationSearchResult: Identifiable {
-    let station: Station
-    let role: StationSearchRowRole
-
-    var id: String {
-        "\(role)-\(station.id)"
-    }
-}
-
-private struct RankedStation {
-    let station: Station
-    let priority: Int
-    let index: Int
-}
-
-private enum StationSearchRowRole {
-    case algorithmic
-    case history
-    case regular
-
+private extension StationChoice.SuggestionKind {
     var iconSystemName: String {
         switch self {
         case .algorithmic:
@@ -2113,22 +1929,19 @@ private enum StationSearchRowRole {
         }
     }
 
-    var iconColor: Color {
-        OnTrackTheme.dimText
-    }
 }
 
 private struct StationSearchRow: View {
     let station: Station
-    let role: StationSearchRowRole
+    let kind: StationChoice.SuggestionKind
     let onSelect: () -> Void
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: OnTrackTheme.space3) {
-                Image(systemName: role.iconSystemName)
+                Image(systemName: kind.iconSystemName)
                     .font(OnTrackFont.symbol)
-                    .foregroundStyle(role.iconColor)
+                    .foregroundStyle(OnTrackTheme.dimText)
                     .frame(width: 24)
 
                 Text(station.displayName)
@@ -3506,11 +3319,61 @@ private struct PanelEmptyState: View {
 
 private struct SkeletonTrainCard: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
-            .fill(OnTrackTheme.panel)
+        VStack(spacing: TrainPanelLayout.rowGap) {
+            HStack(spacing: OnTrackTheme.space2) {
+                SkeletonBar(width: 44, height: 14)
+
+                HStack(spacing: OnTrackTheme.space1) {
+                    SkeletonBar(width: 8, height: 1)
+                    SkeletonBar(width: 32, height: 10)
+                    SkeletonBar(width: 8, height: 1)
+                }
+                .frame(width: TrainPanelLayout.tripSeparatorWidth)
+
+                SkeletonBar(width: 44, height: 14)
+
+                Spacer(minLength: OnTrackTheme.space2)
+
+                SkeletonBar(width: 40, height: 10)
+            }
+            .frame(height: TrainPanelLayout.topRowHeight)
+
+            HStack(spacing: OnTrackTheme.space2) {
+                HStack(spacing: OnTrackTheme.space1) {
+                    SkeletonBar(width: 36, height: 12)
+                    SkeletonBar(width: 32, height: 12)
+                }
+
+                Spacer()
+
+                SkeletonBar(width: 64, height: 12)
+            }
+            .frame(height: TrainPanelLayout.bottomRowHeight)
+        }
+        .padding(.horizontal, TrainPanelLayout.cardHorizontalInset)
+        .padding(.vertical, TrainPanelLayout.cardVerticalInset)
+        .frame(maxWidth: .infinity)
             .frame(height: TrainPanelLayout.trainCardHeight)
-            .onTrackSurfaceRing(castsShadow: false)
-            .opacity(0.7)
+            .background(
+                OnTrackTheme.panel,
+                in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+                    .strokeBorder(OnTrackTheme.border, lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SkeletonBar: View {
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: height / 2)
+            .fill(OnTrackTheme.dimText.opacity(0.18))
+            .frame(width: width, height: height)
     }
 }
 

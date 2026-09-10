@@ -27,6 +27,7 @@
         "ios:build": "scripts/ios-build.sh",
         "ios:mock": "scripts/ios-run-mock-device.sh",
         "ios:check": "scripts/ios-check.sh",
+        "ios:test": "scripts/ios-domain-tests.sh",
         "ios:store": "scripts/ios-test-storekit.sh",
         "ios:screenshots": "scripts/ios-capture-app-store-screenshots.sh",
         "ios:simulator": "scripts/ios-run-simulator.sh",
