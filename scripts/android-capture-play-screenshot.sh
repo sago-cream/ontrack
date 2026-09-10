@@ -19,7 +19,7 @@ android_gradle installDebug
 adb shell am force-stop dev.hsichen.ontrack
 adb shell am start -W \
     -n dev.hsichen.ontrack/.MainActivity \
-    -d 'https://localhost/app.html?showcase' >/dev/null
+    --ez ontrackShowcase true >/dev/null
 sleep 2
 mkdir -p "$output_dir"
 adb exec-out screencap -p >"$output_path"

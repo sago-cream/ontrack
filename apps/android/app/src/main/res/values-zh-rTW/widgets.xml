@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<resources>
+    <string name="widget_train_title">預計搭乘</string>
+    <string name="widget_routes_title">班次比較</string>
+    <string name="widget_train_description">查看下一班預計搭乘的列車。</string>
+    <string name="widget_routes_description">同時查看三班列車的時間、車次、誤點與票價。</string>
+</resources>

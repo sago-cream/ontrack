@@ -20,7 +20,7 @@ done
 [[ "${ANDROID_VERSION_NAME:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
     || android_die "ANDROID_VERSION_NAME must be a semantic version such as 0.2.0."
 
-"$ANDROID_ROOT_DIR/scripts/android-sync.sh"
+ANDROID_SHOWCASE_MODE=0 "$ANDROID_ROOT_DIR/scripts/android-sync.sh"
 android_gradle bundleRelease \
     -PontrackVersionCode="$ANDROID_VERSION_CODE" \
     -PontrackVersionName="$ANDROID_VERSION_NAME"

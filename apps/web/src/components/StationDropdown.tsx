@@ -6,10 +6,12 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { Clock3, Search, X } from 'lucide-react';
+import { Clock3, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
+import { selectionFeedback, usesNativeUI } from '../native/platform';
+import { useModal } from '../native/useModal';
 import type { Station } from '../types';
 import {
     getFrequentDestinationIdsForOrigin,
@@ -21,11 +23,13 @@ import {
     normalizeEnglishStationName,
     normalizeSearchValue,
     resolvePreferredStationId,
+    stationSuggestions,
 } from './stationSearchUtils';
 
 import './StationDropdown.css';
 
 interface StationDropdownProps {
+    recommendations?: Station[];
     stations: Station[];
     searchValue: string;
     setSearchValue: (value: string) => void;
@@ -54,6 +58,7 @@ function shouldAutoFocusSearchInput() {
 }
 
 export function StationDropdown({
+    recommendations = [],
     stations,
     searchValue,
     setSearchValue,
@@ -199,7 +204,41 @@ export function StationDropdown({
             .map(({ station }) => station);
     }, [searchValue, selectedId, stations, trimmedSearchValue]);
 
+    const modalRef = useModal(isOpen, handleDismiss);
+    const historyKey = showFrequentDestinations
+        ? 'ontrack_android_recent_destinations'
+        : 'ontrack_android_recent_origins';
+    const readHistory = (): Station[] => {
+        try {
+            return (
+                JSON.parse(localStorage.getItem(historyKey) || '[]') as string[]
+            )
+                .map((id) => stationMap.get(id))
+                .filter((station): station is Station => Boolean(station));
+        } catch {
+            return [];
+        }
+    };
+    const nativeSuggestions = usesNativeUI()
+        ? stationSuggestions(
+              stations,
+              searchValue,
+              selectedId,
+              showFrequentDestinations
+                  ? frequentDestinationStations
+                  : recommendations,
+              readHistory()
+          )
+        : [];
     const handleSelect = (stationId: string) => {
+        selectionFeedback();
+        const recent = readHistory()
+            .map((station) => station.id)
+            .filter((id) => id !== stationId);
+        localStorage.setItem(
+            historyKey,
+            JSON.stringify([stationId, ...recent].slice(0, 24))
+        );
         const preferredStationId = resolvePreferredStationId(
             stationId,
             stations,
@@ -238,13 +277,7 @@ export function StationDropdown({
             );
         }
 
-        setSearchValue(
-            selectedStation
-                ? language === 'en'
-                    ? getDisplayStationName(selectedStation)
-                    : selectedStation.name
-                : ''
-        );
+        setSearchValue('');
         setIsOpen(true);
     };
 
@@ -310,7 +343,15 @@ export function StationDropdown({
             ) : null}
 
             {isOpen && (
-                <div className='station-search-overlay'>
+                <div
+                    className='station-search-overlay'
+                    ref={(element) => {
+                        modalRef.current = element;
+                    }}
+                    role='dialog'
+                    aria-modal='true'
+                    aria-label={title}
+                >
                     <div className='station-search-page'>
                         <div className='station-search-content'>
                             <div className='station-search-header'>
@@ -344,7 +385,16 @@ export function StationDropdown({
                                             className='station-search-input'
                                             autoFocus
                                             value={searchValue}
-                                            placeholder={placeholder}
+                                            placeholder={
+                                                selectedStation
+                                                    ? getDisplayStationName(
+                                                          selectedStation
+                                                      )
+                                                    : placeholder
+                                            }
+                                            autoComplete='off'
+                                            autoCapitalize='none'
+                                            spellCheck={false}
                                             aria-label={placeholder}
                                             onChange={(event) =>
                                                 handleInputChange(
@@ -367,9 +417,16 @@ export function StationDropdown({
                                 </div>
 
                                 <div className='station-search-results'>
-                                    {visibleStations.length > 0 ? (
+                                    {(usesNativeUI()
+                                        ? nativeSuggestions.length
+                                        : visibleStations.length) > 0 ? (
                                         <div className='station-search-list'>
-                                            {visibleStations.map((station) => {
+                                            {(usesNativeUI()
+                                                ? nativeSuggestions.map(
+                                                      (row) => row.station
+                                                  )
+                                                : visibleStations
+                                            ).map((station) => {
                                                 const isFrequent =
                                                     showFrequentDestinations &&
                                                     frequentDestinationStations.some(
@@ -396,7 +453,30 @@ export function StationDropdown({
                                                         }
                                                     >
                                                         <span className='station-search-item-icon'>
-                                                            {isFrequent ? (
+                                                            {usesNativeUI() &&
+                                                            nativeSuggestions.find(
+                                                                (row) =>
+                                                                    row.station
+                                                                        .id ===
+                                                                    station.id
+                                                            )?.kind ===
+                                                                'algorithmic' ? (
+                                                                <Sparkles />
+                                                            ) : (
+                                                                  usesNativeUI()
+                                                                      ? nativeSuggestions.find(
+                                                                            (
+                                                                                row
+                                                                            ) =>
+                                                                                row
+                                                                                    .station
+                                                                                    .id ===
+                                                                                station.id
+                                                                        )
+                                                                            ?.kind ===
+                                                                        'history'
+                                                                      : isFrequent
+                                                              ) ? (
                                                                 <Clock3 />
                                                             ) : (
                                                                 <Search />

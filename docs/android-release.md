@@ -39,11 +39,15 @@ Install and launch a debug build on an unlocked device or running emulator:
 bun run android
 ```
 
-Run the instrumented launch and bundled-route tests:
+Run the instrumented navigation, theme, message editor, train selection, and widget tests:
 
 ```sh
 bun run android:test:device
 ```
+
+Tests use a debug-only showcase bundle. Screenshots are retained under
+`apps/android/app/build/outputs/connected_android_test_additional_output`.
+Release bundle creation always disables showcase data.
 
 The Android GitHub Actions workflow runs lint, JVM tests, and API 35 emulator
 tests for Android or shared-web changes.
@@ -142,3 +146,30 @@ Before every public release, verify these answers against the shipped build:
 - No account, advertising SDK, or background location access is present.
 - The Data safety form, privacy policy, support page, screenshots, and release
   notes describe the current behavior.
+
+## Supporter purchases, icons, updates, and widgets
+
+Create the one-time, non-consumable Play product `ontrack.supporter_pack` and
+configure its localized price. Set `PLAY_BILLING_PUBLIC_KEY` to the app's Base64
+RSA licensing public key from Play Console before building. The app verifies
+purchase signatures, acknowledges purchases, restores ownership, and only
+unlocks the three supporter themes and four alternate icons after verification.
+An absent key disables purchase initiation. Offline startup retains the last
+verified entitlement; a successful ownership query can revoke it.
+
+Use an internal-track installation with a license tester to verify purchase,
+pending payment, cancellation, acknowledgment, restoration, and refund handling.
+A sideloaded AOSP emulator cannot validate Play Billing or update availability.
+Update notices use Play's available version code; dismissing one version does
+not hide later versions.
+
+The launcher offers Next Train and Compare Trains widgets. Both use the last
+chosen route, theme, language, and electronic-ticket filter. The first also uses
+the custom share-message template. Network refresh runs through JobScheduler
+at a 15-minute requested interval and is subject to Android battery scheduling;
+cached train selection also refreshes through an inexact departure alarm. Android
+may delay it while idle. The widget needs a saved route and a
+reachable HTTPS backend. No background location permission is requested.
+
+See [Android parity review](android-parity.md) for the iOS baseline, UI changes,
+verification evidence, and remaining device/store verification.

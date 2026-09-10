@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<resources>
+    <string name="widget_train_title">Next Train</string>
+    <string name="widget_routes_title">Compare Trains</string>
+    <string name="widget_train_description">See your next train and share the arrival time.</string>
+    <string name="widget_routes_description">Compare the next three trains.</string>
+</resources>

@@ -1,6 +1,7 @@
 import { Share } from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
+import { isAndroid, NativeApp, type AppearanceMode } from '../native/platform';
 import {
     createShareMessageTemplateValues,
     renderShareMessageTemplate,
@@ -12,6 +13,7 @@ import { addMinutes, parseTrainType, TrainList } from './TrainList';
 import './TrainBoardingPanel.css';
 
 interface TrainBoardingPanelProps {
+    appearanceMode: AppearanceMode;
     canLoadSchedule: boolean;
     originId: string;
     destId: string;
@@ -35,6 +37,7 @@ function getAdjustedArrivalTime(train: TrainInfo) {
 }
 
 export function TrainBoardingPanel({
+    appearanceMode,
     canLoadSchedule,
     originId,
     destId,
@@ -89,6 +92,15 @@ export function TrainBoardingPanel({
     const handleShare = async () => {
         if (!shareMessage) return;
 
+        if (isAndroid()) {
+            try {
+                await NativeApp.share({ text: shareMessage });
+            } catch (error) {
+                console.error('Share failed', error);
+            }
+            return;
+        }
+
         if (navigator.share) {
             try {
                 await navigator.share({ text: shareMessage });
@@ -120,7 +132,12 @@ export function TrainBoardingPanel({
 
                 <div className='train-boarding-summary'>
                     <div className='train-boarding-copy'>
-                        <p aria-live='polite'>{shareSummary}</p>
+                        <p
+                            className={!activeTrain ? 'is-empty' : undefined}
+                            aria-live='polite'
+                        >
+                            {shareSummary}
+                        </p>
                     </div>
 
                     <button
@@ -151,6 +168,10 @@ export function TrainBoardingPanel({
                         refreshLiveNonce={refreshLiveNonce}
                         onRefreshingLiveChange={onRefreshingLiveChange}
                         showHeading
+                        widgetMessageTemplate={messageTemplate}
+                        widgetAppearance={appearanceMode}
+                        widgetOrigin={originName}
+                        widgetDestination={destName}
                     />
                 ) : (
                     <div className='train-boarding-empty' aria-hidden='true' />

@@ -1,6 +1,12 @@
-import { storySchedule, storyStations } from '../fixtures/storyFixtures';
+import {
+    nativeStorySchedule,
+    nativeStoryStations,
+    storySchedule,
+    storyStations,
+} from '../fixtures/storyFixtures';
 import type { TranslationKey } from '../i18n/translations';
 import type { TranslationParams } from '../i18n/types';
+import { usesNativeUI } from '../native/platform';
 import type { ScheduleResponse, Station } from '../types';
 
 // In-flight request cache to prevent duplicate simultaneous requests
@@ -197,7 +203,7 @@ function getStatusErrorMessage(statusCode: number | null, t: Translate) {
 export const api = {
     getStations: async (): Promise<Station[]> => {
         if (isShowcaseMode()) {
-            return storyStations;
+            return usesNativeUI() ? nativeStoryStations : storyStations;
         }
 
         const now = Date.now();
@@ -221,7 +227,7 @@ export const api = {
         options: { refreshLive?: boolean } = {}
     ) => {
         if (isShowcaseMode()) {
-            return storySchedule;
+            return usesNativeUI() ? nativeStorySchedule : storySchedule;
         }
 
         const params = new URLSearchParams({ origin, dest });

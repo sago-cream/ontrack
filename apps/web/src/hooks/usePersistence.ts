@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const STORAGE_KEYS = {
     ORIGIN: 'ontrack_origin',
@@ -48,22 +48,22 @@ export function usePersistence() {
         () => getStorageItem(STORAGE_KEYS.AUTO_DETECT_ORIGIN) === 'true'
     );
 
-    const saveOrigin = (id: string) => {
+    const saveOrigin = useCallback((id: string) => {
         if (!isValidStationId(id)) return;
         setOriginId(id);
         setStorageItem(STORAGE_KEYS.ORIGIN, id);
-    };
+    }, []);
 
-    const saveDest = (id: string) => {
+    const saveDest = useCallback((id: string) => {
         if (!isValidStationId(id)) return;
         setDestId(id);
         setStorageItem(STORAGE_KEYS.DEST, id);
-    };
+    }, []);
 
-    const saveAutoDetectOrigin = (value: boolean) => {
+    const saveAutoDetectOrigin = useCallback((value: boolean) => {
         setAutoDetectOrigin(value);
         setStorageItem(STORAGE_KEYS.AUTO_DETECT_ORIGIN, String(value));
-    };
+    }, []);
 
     return {
         originId,

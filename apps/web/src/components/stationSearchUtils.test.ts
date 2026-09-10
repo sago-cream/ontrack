@@ -5,6 +5,7 @@ import {
     filterStationsBySearch,
     isTaipeiCircularStation,
     resolvePreferredStationId,
+    stationSuggestions,
 } from './stationSearchUtils';
 
 const stations: Station[] = [
@@ -43,5 +44,58 @@ describe('Taipei circular station avoidance', () => {
         expect(resolvePreferredStationId('1001', stations, '環島')).toBe(
             '1001'
         );
+    });
+});
+
+describe('native station suggestions', () => {
+    const other: Station[] = [2, 3, 4, 5, 6].map((id) => ({
+        id: String(id),
+        name: `車站${id}`,
+        nameEn: `Station ${id}`,
+        lat: 25,
+        lon: 121,
+    }));
+    const all = [...stations, ...other];
+    test('orders recommendations, history and remaining stations without duplicates', () => {
+        const result = stationSuggestions(
+            all,
+            '',
+            '1000',
+            [stations[1], other[1], other[0]],
+            [other[0], other[2]]
+        );
+        expect(result.map(({ station }) => station.id)).toEqual([
+            '3',
+            '2',
+            '4',
+            '5',
+            '6',
+        ]);
+        expect(result.map(({ kind }) => kind)).toEqual([
+            'algorithmic',
+            'algorithmic',
+            'history',
+            'regular',
+            'regular',
+        ]);
+    });
+    test('puts search matches first and limits the following history to two', () => {
+        const result = stationSuggestions(all, '6', '1000', [other[0]], other);
+        expect(result[0].station.id).toBe('6');
+        expect(result.filter(({ kind }) => kind === 'history')).toHaveLength(2);
+        expect(new Set(result.map(({ station }) => station.id)).size).toBe(
+            result.length
+        );
+    });
+    test('includes the circular station only in explicit matching results', () => {
+        expect(
+            stationSuggestions(all, '環島', '1000', [], [stations[1]])[0]
+                .station.id
+        ).toBe('1001');
+        expect(
+            stationSuggestions(all, '', '1000', [], [stations[1]]).some(
+                ({ station }) => station.id === '1001'
+            )
+        ).toBe(false);
     });
 });

@@ -41,3 +41,5 @@ play-service-account.json
 
 # Environment variables
 .env
+
+*.tsbuildinfo

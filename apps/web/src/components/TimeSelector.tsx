@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Moon, TimerReset } from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
+import { useModal } from '../native/useModal';
 
 import './TimeSelector.css';
 
@@ -26,7 +27,9 @@ const MINUTES = Array.from(
 type WheelTimePart = 'day' | 'hour' | 'minute';
 
 function getTodayDate() {
-    const today = new Date();
+    const today = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' })
+    );
 
     return new Date(today.getFullYear(), today.getMonth(), today.getDate());
 }
@@ -293,11 +296,10 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
         [t]
     );
 
-    const dateOptions = useMemo(() => {
+    const dateOptions = (() => {
         const dateFormatter = new Intl.DateTimeFormat(language, {
             month: '2-digit',
             day: '2-digit',
-            timeZone: 'Asia/Taipei',
         });
 
         return Array.from(
@@ -312,7 +314,7 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
                 };
             }
         );
-    }, [language]);
+    })();
 
     useEffect(() => {
         const syncNowSelection = () => {
@@ -321,7 +323,7 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
             }
         };
         const initialTimer = window.setTimeout(syncNowSelection, 0);
-        const interval = window.setInterval(syncNowSelection, 60000);
+        const interval = window.setInterval(syncNowSelection, 30000);
 
         return () => {
             window.clearTimeout(initialTimer);
@@ -409,25 +411,7 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
         setIsEditorOpen(false);
     }, []);
 
-    useEffect(() => {
-        if (!isEditorOpen) return;
-
-        const previousOverflow = document.body.style.overflow;
-        const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape') return;
-
-            event.preventDefault();
-            closeEditor();
-        };
-
-        document.body.style.overflow = 'hidden';
-        document.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            document.body.style.overflow = previousOverflow;
-            document.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [closeEditor, isEditorOpen]);
+    const modalRef = useModal(isEditorOpen, closeEditor);
 
     const handleSetNow = () => {
         const nextSelection = getCurrentDateTimeSelection('now');
@@ -484,6 +468,9 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
 
         draftRef.current = nextSelection;
         setDraft(nextSelection);
+        window.requestAnimationFrame(() =>
+            scrollWheelsToSelection(nextSelection)
+        );
     };
 
     const handleSetTimePart = (
@@ -580,6 +567,9 @@ export function TimeSelector({ value, onChange }: TimeSelectorProps) {
             {isEditorOpen && (
                 <div className='time-editor-backdrop' onClick={closeEditor}>
                     <div
+                        ref={(element) => {
+                            modalRef.current = element;
+                        }}
                         className='time-editor-sheet'
                         role='dialog'
                         aria-modal='true'

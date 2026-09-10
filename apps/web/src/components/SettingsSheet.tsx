@@ -8,7 +8,19 @@ import {
     type KeyboardEvent,
     type ReactNode,
 } from 'react';
-import { ArrowLeft, Check, ChevronRight, ExternalLink, X } from 'lucide-react';
+import {
+    ArrowLeft,
+    ArrowUpRight,
+    Check,
+    ChevronRight,
+    CircleHelp,
+    Download,
+    Hand,
+    Heart,
+    LoaderCircle,
+    RotateCw,
+    X,
+} from 'lucide-react';
 
 import { LANGUAGE_OPTIONS } from '../i18n/translations';
 import type { LanguageCode } from '../i18n/types';
@@ -25,9 +37,23 @@ import {
 
 import './SettingsSheet.css';
 
-export type AppearanceMode = 'system' | 'light' | 'dark';
+import {
+    isAndroid,
+    NativeApp,
+    selectionFeedback,
+    usesNativeUI,
+    type AppearanceMode,
+    type AppIcon,
+} from '../native/platform';
+import { useModal } from '../native/useModal';
+import type { useNativeState } from '../native/useNativeState';
+
+export type { AppearanceMode } from '../native/platform';
 
 interface SettingsSheetProps {
+    native: ReturnType<typeof useNativeState>;
+    originName: string;
+    destinationName: string;
     isOpen: boolean;
     onClose: () => void;
     appearanceMode: AppearanceMode;
@@ -43,17 +69,26 @@ const APPEARANCE_OPTIONS: {
     labelKey:
         | 'settings.appearanceSystem'
         | 'settings.appearanceLight'
-        | 'settings.appearanceDark';
+        | 'settings.appearanceDark'
+        | 'settings.appearanceSage'
+        | 'settings.appearanceAmethyst'
+        | 'settings.appearanceEmber';
 }[] = [
     { value: 'system', labelKey: 'settings.appearanceSystem' },
     { value: 'light', labelKey: 'settings.appearanceLight' },
     { value: 'dark', labelKey: 'settings.appearanceDark' },
+    { value: 'sage', labelKey: 'settings.appearanceSage' },
+    { value: 'amethyst', labelKey: 'settings.appearanceAmethyst' },
+    { value: 'ember', labelKey: 'settings.appearanceEmber' },
 ];
 
 const SUPPORT_URL = 'https://ontrack.hsichen.dev/docs/support';
 const PRIVACY_URL = 'https://ontrack.hsichen.dev/docs/privacy';
 
 export function SettingsSheet({
+    native,
+    originName,
+    destinationName,
     isOpen,
     onClose,
     appearanceMode,
@@ -66,13 +101,21 @@ export function SettingsSheet({
     const { language, setLanguage, t } = useI18n();
     const [page, setPage] = useState<'settings' | 'messageFormat'>('settings');
 
-    if (!isOpen) return null;
-
     const close = () => {
         setPage('settings');
         onClose();
     };
-    const sampleValues = getSampleShareMessageTemplateValues(language);
+    const modalRef = useModal(isOpen, () =>
+        page === 'messageFormat' ? setPage('settings') : close()
+    );
+    if (!isOpen) return null;
+    const nativeUI = usesNativeUI();
+    const sampleValues = {
+        ...getSampleShareMessageTemplateValues(language),
+        origin: originName || (language === 'en' ? 'Taipei' : '臺北'),
+        destination:
+            destinationName || (language === 'en' ? 'Hsinchu' : '新竹'),
+    };
     const messagePreview = renderShareMessageTemplate(
         messageTemplate,
         sampleValues
@@ -81,6 +124,7 @@ export function SettingsSheet({
     return (
         <div className='settings-backdrop' onClick={close}>
             <section
+                ref={modalRef}
                 className='settings-sheet'
                 role='dialog'
                 aria-modal='true'
@@ -118,32 +162,161 @@ export function SettingsSheet({
 
                 {page === 'settings' ? (
                     <div className='settings-list'>
-                        <SettingsOptionGroup title={t('settings.language')}>
-                            {LANGUAGE_OPTIONS.map((option) => (
-                                <SettingsOptionButton
-                                    key={option.code}
-                                    label={option.label}
-                                    isSelected={language === option.code}
-                                    onClick={() =>
-                                        setLanguage(option.code as LanguageCode)
-                                    }
-                                />
-                            ))}
-                        </SettingsOptionGroup>
+                        {!nativeUI && (
+                            <SettingsOptionGroup title={t('settings.language')}>
+                                {LANGUAGE_OPTIONS.map((option) => (
+                                    <SettingsOptionButton
+                                        key={option.code}
+                                        label={option.label}
+                                        isSelected={language === option.code}
+                                        onClick={() =>
+                                            setLanguage(
+                                                option.code as LanguageCode
+                                            )
+                                        }
+                                    />
+                                ))}
+                            </SettingsOptionGroup>
+                        )}
 
-                        <div className='settings-divider' />
+                        {!nativeUI && <div className='settings-divider' />}
+                        {nativeUI && native.state.updateVersion ? (
+                            <>
+                                <SettingsOptionGroup
+                                    title={t('settings.updateAvailable')}
+                                >
+                                    <button
+                                        className='settings-native-action'
+                                        onClick={() =>
+                                            void NativeApp.openStore()
+                                        }
+                                    >
+                                        <Download />
+                                        {t('settings.updateNow')}
+                                    </button>
+                                    <button
+                                        className='settings-native-action'
+                                        onClick={() => {
+                                            void NativeApp.ignoreUpdate({
+                                                version:
+                                                    native.state.updateVersion!,
+                                            }).then(native.refresh);
+                                        }}
+                                    >
+                                        {t('settings.ignoreUpdate')}
+                                    </button>
+                                </SettingsOptionGroup>
+                                <div className='settings-divider' />
+                            </>
+                        ) : null}
+                        {nativeUI && native.state.supporter ? (
+                            <>
+                                <SettingsOptionGroup
+                                    title={t('settings.appIcon')}
+                                >
+                                    <div className='app-icon-grid'>
+                                        {(
+                                            [
+                                                'primary',
+                                                'dark',
+                                                'sage',
+                                                'amethyst',
+                                                'ember',
+                                            ] as AppIcon[]
+                                        ).map((icon) => (
+                                            <button
+                                                key={icon}
+                                                className='app-icon-option'
+                                                aria-label={icon}
+                                                aria-pressed={
+                                                    native.state.icon === icon
+                                                }
+                                                onClick={async () => {
+                                                    if (isAndroid())
+                                                        await NativeApp.setIcon(
+                                                            { icon }
+                                                        );
+                                                    native.setState({
+                                                        ...native.state,
+                                                        icon,
+                                                    });
+                                                    selectionFeedback();
+                                                }}
+                                            >
+                                                <img
+                                                    src={`/icons/${icon}.png`}
+                                                    alt=''
+                                                />
+                                                <span>
+                                                    {native.state.icon ===
+                                                    icon ? (
+                                                        <Check />
+                                                    ) : null}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </SettingsOptionGroup>
+                                <div className='settings-divider' />
+                            </>
+                        ) : null}
 
-                        <SettingsOptionGroup title={t('settings.appearance')}>
-                            {APPEARANCE_OPTIONS.map((option) => (
-                                <SettingsOptionButton
-                                    key={option.value}
-                                    label={t(option.labelKey)}
-                                    isSelected={appearanceMode === option.value}
-                                    onClick={() =>
-                                        onAppearanceModeChange(option.value)
-                                    }
-                                />
-                            ))}
+                        <SettingsOptionGroup
+                            title={t(
+                                nativeUI
+                                    ? 'settings.theme'
+                                    : 'settings.appearance'
+                            )}
+                        >
+                            <div
+                                className={
+                                    nativeUI
+                                        ? 'theme-picker'
+                                        : 'settings-option-controls'
+                                }
+                            >
+                                {APPEARANCE_OPTIONS.filter(
+                                    (option) =>
+                                        ['system', 'light', 'dark'].includes(
+                                            option.value
+                                        ) || native.state.supporter
+                                ).map((option) =>
+                                    nativeUI ? (
+                                        <button
+                                            key={option.value}
+                                            className='theme-option'
+                                            aria-label={t(option.labelKey)}
+                                            aria-pressed={
+                                                appearanceMode === option.value
+                                            }
+                                            onClick={() => {
+                                                onAppearanceModeChange(
+                                                    option.value
+                                                );
+                                                selectionFeedback();
+                                            }}
+                                        >
+                                            <span
+                                                className={`theme-swatch theme-${option.value}`}
+                                            />
+                                            <span>{t(option.labelKey)}</span>
+                                        </button>
+                                    ) : (
+                                        <SettingsOptionButton
+                                            key={option.value}
+                                            label={t(option.labelKey)}
+                                            isSelected={
+                                                appearanceMode === option.value
+                                            }
+                                            onClick={() =>
+                                                onAppearanceModeChange(
+                                                    option.value
+                                                )
+                                            }
+                                        />
+                                    )
+                                )}
+                            </div>
                         </SettingsOptionGroup>
 
                         <div className='settings-divider' />
@@ -170,13 +343,76 @@ export function SettingsSheet({
 
                         <div className='settings-divider' />
 
+                        {nativeUI ? (
+                            <>
+                                <SettingsOptionGroup
+                                    title={t('settings.supportOnTrack')}
+                                >
+                                    <button
+                                        className='settings-native-action'
+                                        disabled={
+                                            native.busy ||
+                                            native.state.supporter ||
+                                            !native.state.billingAvailable
+                                        }
+                                        onClick={() =>
+                                            void native.transact(false)
+                                        }
+                                    >
+                                        {native.busy ? (
+                                            <LoaderCircle className='is-spinning' />
+                                        ) : native.state.supporter ? (
+                                            <Check />
+                                        ) : (
+                                            <Heart />
+                                        )}
+                                        {native.state.supporter
+                                            ? t('settings.supported')
+                                            : native.state.price
+                                              ? t('settings.leaveTipPrice', {
+                                                    price: native.state.price,
+                                                })
+                                              : t('settings.leaveTip')}
+                                    </button>
+                                    <button
+                                        className='settings-native-action'
+                                        disabled={native.busy}
+                                        onClick={() =>
+                                            void native.transact(true)
+                                        }
+                                    >
+                                        <RotateCw />
+                                        {t('settings.restorePurchases')}
+                                    </button>
+                                    {native.status ? (
+                                        <p
+                                            className='settings-footnote'
+                                            role='status'
+                                        >
+                                            {t(
+                                                `settings.purchase.${native.status as 'supported' | 'pending' | 'unavailable' | 'noPurchases'}`
+                                            )}
+                                        </p>
+                                    ) : null}
+                                    {!native.state.supporter ? (
+                                        <p className='settings-footnote'>
+                                            {t('settings.supportFootnote')}
+                                        </p>
+                                    ) : null}
+                                </SettingsOptionGroup>
+                                <div className='settings-divider' />
+                            </>
+                        ) : null}
+
                         <SettingsOptionGroup title={t('settings.links')}>
                             <SettingsLink
                                 href={SUPPORT_URL}
+                                icon={<CircleHelp />}
                                 label={t('settings.support')}
                             />
                             <SettingsLink
                                 href={PRIVACY_URL}
+                                icon={<Hand />}
                                 label={t('settings.privacy')}
                             />
                         </SettingsOptionGroup>
@@ -184,6 +420,8 @@ export function SettingsSheet({
                 ) : (
                     <MessageFormatEditor
                         language={language}
+                        originName={originName}
+                        destinationName={destinationName}
                         messageTemplate={messageTemplate}
                         onMessageTemplateChange={onMessageTemplateChange}
                     />
@@ -256,16 +494,24 @@ function SettingsNavigationButton({
 
 function MessageFormatEditor({
     language,
+    originName,
+    destinationName,
     messageTemplate,
     onMessageTemplateChange,
 }: {
     language: LanguageCode;
+    originName: string;
+    destinationName: string;
     messageTemplate: string;
     onMessageTemplateChange: (template: string) => void;
 }) {
     const { t } = useI18n();
     const editorRef = useRef<InlineMessageEditorHandle>(null);
-    const sampleValues = getSampleShareMessageTemplateValues(language);
+    const sampleValues = {
+        ...getSampleShareMessageTemplateValues(language),
+        ...(originName ? { origin: originName } : {}),
+        ...(destinationName ? { destination: destinationName } : {}),
+    };
     const preview = renderShareMessageTemplate(messageTemplate, sampleValues);
     const presets = getShareMessagePresets(language);
     const tokenLabels = Object.fromEntries(
@@ -545,7 +791,15 @@ function SettingsOptionButton({
     );
 }
 
-function SettingsLink({ href, label }: { href: string; label: string }) {
+function SettingsLink({
+    href,
+    label,
+    icon,
+}: {
+    href: string;
+    label: string;
+    icon?: ReactNode;
+}) {
     return (
         <a
             className='settings-option-link'
@@ -553,8 +807,9 @@ function SettingsLink({ href, label }: { href: string; label: string }) {
             target='_blank'
             rel='noreferrer'
         >
+            {icon}
             <span>{label}</span>
-            <ExternalLink aria-hidden='true' />
+            <ArrowUpRight aria-hidden='true' />
         </a>
     );
 }

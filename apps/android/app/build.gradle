@@ -20,6 +20,7 @@ if (hasAnyReleaseSigningValue && !hasReleaseSigning) {
 }
 
 android {
+    compileOptions { coreLibraryDesugaringEnabled true }
     namespace = "dev.hsichen.ontrack"
     compileSdk = rootProject.ext.compileSdkVersion
     buildFeatures {
@@ -27,6 +28,8 @@ android {
     }
     defaultConfig {
         applicationId "dev.hsichen.ontrack"
+        buildConfigField 'String', 'PLAY_BILLING_PUBLIC_KEY', groovy.json.JsonOutput.toJson(environment['PLAY_BILLING_PUBLIC_KEY'] ?: '')
+        buildConfigField 'String', 'ONTRACK_API_ORIGIN', groovy.json.JsonOutput.toJson(environment['ANDROID_API_ORIGIN'] ?: 'https://ontrack.hsichen.dev')
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
@@ -73,6 +76,9 @@ repositories {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'com.android.billingclient:billing:9.1.0'
+    implementation 'com.google.android.play:app-update:2.1.0'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
