@@ -221,3 +221,67 @@ describe('schedule API policy', () => {
         expect(waitUntilCalls).toHaveLength(0);
     });
 });
+
+describe('Android API access', () => {
+    test('allows the bundled origin through GET validation and exposes errors', async () => {
+        const { db } = createThrowingDatabase();
+        const { ctx } = createContext();
+        const response = await worker.fetch(
+            new Request(
+                'https://ontrack.test/api/schedule?origin=bad!&dest=1020',
+                {
+                    headers: { Origin: 'https://localhost' },
+                }
+            ),
+            createEnv(db),
+            ctx
+        );
+        expect(response.status).toBe(400);
+        expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
+            'https://localhost'
+        );
+    });
+
+    test('allows GET preflight for the bundled origin', async () => {
+        const { db } = createThrowingDatabase();
+        const { ctx } = createContext();
+        const response = await worker.fetch(
+            new Request('https://ontrack.test/api/stations', {
+                method: 'OPTIONS',
+                headers: {
+                    'Origin': 'https://localhost',
+                    'Access-Control-Request-Method': 'GET',
+                },
+            }),
+            createEnv(db),
+            ctx
+        );
+        expect(response.status).toBe(204);
+        expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
+            'https://localhost'
+        );
+    });
+
+    for (const origin of [
+        'http://localhost',
+        'https://localhost:1234',
+        'https://localhost.example.com',
+    ]) {
+        test(`rejects unlisted origin ${origin}`, async () => {
+            const { db, state } = createThrowingDatabase();
+            const { ctx } = createContext();
+            const response = await worker.fetch(
+                new Request('https://ontrack.test/api/stations', {
+                    headers: { Origin: origin },
+                }),
+                createEnv(db),
+                ctx
+            );
+            expect(response.status).toBe(403);
+            expect(response.headers.has('Access-Control-Allow-Origin')).toBe(
+                false
+            );
+            expect(state.prepareCalls).toBe(0);
+        });
+    }
+});

@@ -2,7 +2,6 @@
 
 ANDROID_ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ANDROID_PROJECT_DIR="$ANDROID_ROOT_DIR/apps/android"
-ANDROID_API_ORIGIN_VALUE="${ANDROID_API_ORIGIN:-https://ontrack.hsichen.dev}"
 
 android_die() {
     echo "$*" >&2
@@ -31,32 +30,35 @@ android_load_env() {
     done <"$env_path"
 }
 
+android_java_is_supported() {
+    local java_major
+    java_major="$("$1" -version 2>&1 | sed -nE 's/.*version "([0-9]+).*/\1/p' | head -n 1)"
+    [[ "$java_major" =~ ^[0-9]+$ ]] && ((java_major >= 21 && java_major <= 24))
+}
+
 android_select_java() {
     if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
+        android_java_is_supported "$JAVA_HOME/bin/java" \
+            || android_die "JAVA_HOME must point to JDK 21-24."
         return
     fi
 
     local candidate
     for candidate in \
         "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
-        "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home" \
-        "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"; do
-        if [[ -x "$candidate/bin/java" ]]; then
+        "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"; do
+        if [[ -x "$candidate/bin/java" ]] && android_java_is_supported "$candidate/bin/java"; then
             JAVA_HOME="$candidate"
             export JAVA_HOME
             return
         fi
     done
 
-    if command -v java >/dev/null 2>&1; then
-        local java_major
-        java_major="$(java -version 2>&1 | sed -nE 's/.*version "([0-9]+).*/\1/p' | head -n 1)"
-        if [[ "$java_major" =~ ^[0-9]+$ ]] && ((java_major >= 17 && java_major <= 24)); then
-            return
-        fi
+    if command -v java >/dev/null 2>&1 && android_java_is_supported java; then
+        return
     fi
 
-    android_die "Android builds require JDK 17-24. Install Android Studio or OpenJDK 21, or set JAVA_HOME."
+    android_die "Android builds require JDK 21-24. Install OpenJDK 21 or set JAVA_HOME."
 }
 
 android_select_sdk() {
@@ -91,3 +93,4 @@ android_require_command() {
 }
 
 android_load_env
+ANDROID_API_ORIGIN_VALUE="${ANDROID_API_ORIGIN:-https://ontrack.hsichen.dev}"

@@ -7,7 +7,7 @@ web app. The native project lives in `apps/android`, opens the bundled
 ## Prerequisites
 
 - Bun 1.3.9 or newer
-- JDK 21 (JDK 17 through 24 is accepted by the scripts)
+- JDK 21 (JDK 21 through 24 is accepted by the scripts)
 - Android SDK Platform 36 and Build Tools 36.0.0
 - `adb` for device, emulator, and screenshot commands
 - A Play Console app using package ID `dev.hsichen.ontrack`
@@ -20,7 +20,10 @@ bun run android:sync
 ```
 
 Set `ANDROID_API_ORIGIN` when a native build should use another HTTPS backend.
-Cleartext HTTP is disabled in the production manifest.
+Cleartext HTTP is disabled in the production manifest. The bundled WebView sends
+`Origin: https://localhost`; the API must allow that exact origin. Deploy the
+worker's Android CORS change before testing against production, or add
+`https://localhost` to the backend's `CORS_ALLOWED_ORIGINS` configuration.
 
 ## Development and tests
 
