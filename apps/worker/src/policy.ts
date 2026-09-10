@@ -3,6 +3,7 @@ import type { Station } from './types';
 
 export const SCHEDULE_FUTURE_DAY_LIMIT = 7;
 export const MANUAL_LIVE_REFRESH_CLIENT_DAILY_LIMIT = 3;
+export const MANUAL_LIVE_REFRESH_MAX_AGE_SECONDS = 5 * 60;
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -64,6 +65,17 @@ export function resolveScheduleStations(
     return originStation && destinationStation
         ? { originStation, destinationStation }
         : null;
+}
+
+export function shouldRefreshLiveBoardForManual(
+    isToday: boolean,
+    liveDataAgeSeconds: number | null
+) {
+    return (
+        isToday &&
+        (liveDataAgeSeconds === null ||
+            liveDataAgeSeconds > MANUAL_LIVE_REFRESH_MAX_AGE_SECONDS)
+    );
 }
 
 function toHex(buffer: ArrayBuffer) {

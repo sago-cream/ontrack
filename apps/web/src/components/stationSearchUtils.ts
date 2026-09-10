@@ -1,9 +1,8 @@
 import type { Station } from '../types';
 
 const TAIPEI_MAIN_NAME = '臺北';
-const TAIPEI_CIRCULAR_NAME = '臺北(環島)';
 const CIRCULAR_SEARCH_PATTERN =
-    /環島|circular|circle|loop|round(?:\s|-)?island|around\s+island/i;
+    /環島|circular|circle|loop|(?:round|around|surround)(?:\s|-)?island/i;
 
 export function normalizeSearchValue(value: string): string {
     return value.replace(/台/g, '臺').trim();
@@ -17,6 +16,15 @@ export function isExplicitCircularSearch(value: string): boolean {
     return CIRCULAR_SEARCH_PATTERN.test(normalizeSearchValue(value));
 }
 
+export function isTaipeiCircularStation(
+    station: Pick<Station, 'name'>
+): boolean {
+    return (
+        normalizeSearchValue(station.name).replace(/[\s()（）-]/g, '') ===
+        '臺北環島'
+    );
+}
+
 export function resolvePreferredStation(
     station: Station | undefined,
     stations: Station[],
@@ -24,7 +32,7 @@ export function resolvePreferredStation(
 ): Station | undefined {
     if (!station) return undefined;
     if (
-        station.name !== TAIPEI_CIRCULAR_NAME ||
+        !isTaipeiCircularStation(station) ||
         isExplicitCircularSearch(searchValue)
     ) {
         return station;
@@ -66,6 +74,6 @@ export function filterStationsBySearch(
         if (!matchesSearch) return false;
         if (explicitCircularSearch) return true;
 
-        return station.name !== TAIPEI_CIRCULAR_NAME;
+        return !isTaipeiCircularStation(station);
     });
 }

@@ -44,21 +44,24 @@ if [[ "${IOS_SKIP_LAUNCH:-0}" == "1" ]]; then
     exit 0
 fi
 
-LAUNCH_ENV_ARGS=()
+LAUNCH_ARGS=(
+    device
+    process
+    launch
+    --device "$DEVICE_ID"
+    --terminate-existing
+)
 if [[ "${IOS_MOCK_DATA:-0}" == "1" ]]; then
     if [[ "$CONFIGURATION" != "Debug" ]]; then
         echo "IOS_MOCK_DATA=1 requires IOS_CONFIGURATION=Debug." >&2
         exit 1
     fi
 
-    LAUNCH_ENV_ARGS=(--environment-variables '{"ONTRACK_MOCK_DATA":"1"}')
+    LAUNCH_ARGS+=(--environment-variables '{"ONTRACK_MOCK_DATA":"1"}')
 fi
+LAUNCH_ARGS+=("$IOS_BUNDLE_ID_VALUE")
 
 echo "Launching $IOS_BUNDLE_ID_VALUE..."
-xcrun devicectl device process launch \
-    --device "$DEVICE_ID" \
-    --terminate-existing \
-    "${LAUNCH_ENV_ARGS[@]}" \
-    "$IOS_BUNDLE_ID_VALUE"
+xcrun devicectl "${LAUNCH_ARGS[@]}"
 
 echo "Updated and launched $IOS_BUNDLE_ID_VALUE on $DEVICE_ID."

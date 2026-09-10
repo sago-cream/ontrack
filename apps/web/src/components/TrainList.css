@@ -220,6 +220,14 @@
     text-overflow: ellipsis;
 }
 
+.train-card-type-primary {
+    color: var(--color-primary);
+}
+
+.train-card-type-mixed {
+    color: color-mix(in srgb, var(--color-text-dim), var(--color-primary) 50%);
+}
+
 .train-card-price,
 .train-card-route {
     min-width: 0;

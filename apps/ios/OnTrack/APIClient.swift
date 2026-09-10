@@ -64,6 +64,10 @@ actor APIClient {
         do {
             (data, response) = try await URLSession.shared.data(from: url)
         } catch let error as URLError {
+            if error.code == .cancelled || Task.isCancelled {
+                throw CancellationError()
+            }
+
             throw APIError.networkUnavailable(error)
         }
 

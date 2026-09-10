@@ -41,7 +41,7 @@ local development or fork setup. Before deploying a fork:
 1. Create your own Cloudflare D1 database.
 2. Copy `apps/worker/wrangler.production.example.jsonc` to
    `apps/worker/wrangler.production.jsonc`.
-3. Fill in your production route and D1 `database_id`.
+3. Fill in the Cloudflare `account_id`, production route, and D1 `database_id`.
 4. Set `CORS_ALLOWED_ORIGINS` in the production config to your web origin.
 5. Set Worker secrets for production:
 
@@ -54,8 +54,11 @@ wrangler secret put REFRESH_SECRET --config apps/worker/wrangler.production.json
 `TDX_CLIENT_ID` and `TDX_CLIENT_SECRET` are optional for development. Without
 them, the Worker uses TDX Visitor Mode.
 
-Use `bun run deploy:dev` for the tracked development config after filling its D1
-placeholder. Use `bun run deploy` for the ignored production config.
+Use `bun run deploy:dev:dry-run` before `bun run deploy:dev` for the tracked
+development config after filling its D1 placeholder. Run
+`bun run deploy:prod:check` and
+`bun run deploy:prod:dry-run` before using `bun run deploy` with the ignored
+production config. Deployment refuses unresolved template placeholders.
 
 ## Pull Requests
 

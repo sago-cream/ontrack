@@ -1,8 +1,11 @@
 import { Share } from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
+import {
+    createShareMessageTemplateValues,
+    renderShareMessageTemplate,
+} from '../shareMessage';
 import type { TrainInfo } from '../types';
-import type { ShareMessageFormat } from './SettingsSheet';
 import type { TimeMode } from './TimeSelector';
 import { addMinutes, parseTrainType, TrainList } from './TrainList';
 
@@ -18,7 +21,8 @@ interface TrainBoardingPanelProps {
     time: string;
     timeMode: TimeMode;
     selectedTrain: TrainInfo | null;
-    messageFormat: ShareMessageFormat;
+    electronicTicketOnly: boolean;
+    messageTemplate: string;
     onSelectTrain: (train: TrainInfo) => void;
     refreshLiveNonce?: number;
     onRefreshingLiveChange?: (isRefreshing: boolean) => void;
@@ -40,7 +44,8 @@ export function TrainBoardingPanel({
     time,
     timeMode,
     selectedTrain,
-    messageFormat,
+    electronicTicketOnly,
+    messageTemplate,
     onSelectTrain,
     refreshLiveNonce = 0,
     onRefreshingLiveChange,
@@ -53,28 +58,33 @@ export function TrainBoardingPanel({
     const trainType = activeTrain
         ? parseTrainType(activeTrain.trainType, language)
         : '';
-    const plannedRideMessage = activeTrain
-        ? t('train.plannedBoardingMessage', {
-              type: trainType,
-              number: activeTrain.trainNo,
-              time: adjustedArrivalTime,
-              station: destName,
-          })
-        : canLoadSchedule
-          ? t('train.noTrainsAvailable')
-          : t('app.selectRoute');
     const shareMessage = activeTrain
-        ? messageFormat === 'routeArrival'
-            ? t('share.routeArrivalMessage', {
+        ? renderShareMessageTemplate(
+              messageTemplate,
+              createShareMessageTemplateValues({
+                  train: activeTrain,
                   origin: originName,
-                  station: destName,
-                  time: adjustedArrivalTime,
+                  destination: destName,
+                  trainType,
+                  arrivalTime: adjustedArrivalTime,
+                  line:
+                      activeTrain.tripLine === 1
+                          ? t('train.mountainLine')
+                          : activeTrain.tripLine === 2
+                            ? t('train.coastLine')
+                            : '',
+                  delay:
+                      (activeTrain.delay ?? 0) > 0
+                          ? t('train.delayedBy', {
+                                minutes: activeTrain.delay ?? 0,
+                            })
+                          : t('train.onTime'),
               })
-            : t('share.arrivalMessage', {
-                  station: destName,
-                  time: adjustedArrivalTime,
-              })
+          )
         : null;
+    const shareSummary =
+        shareMessage ??
+        (canLoadSchedule ? t('train.noTrainsAvailable') : t('app.selectRoute'));
 
     const handleShare = async () => {
         if (!shareMessage) return;
@@ -105,12 +115,12 @@ export function TrainBoardingPanel({
                     id='train-boarding-title'
                     className='train-boarding-heading'
                 >
-                    {t('train.plannedRide')}
+                    {t('train.shareInfo')}
                 </h2>
 
                 <div className='train-boarding-summary'>
                     <div className='train-boarding-copy'>
-                        <p aria-live='polite'>{plannedRideMessage}</p>
+                        <p aria-live='polite'>{shareSummary}</p>
                     </div>
 
                     <button
@@ -135,6 +145,7 @@ export function TrainBoardingPanel({
                         date={date}
                         time={time}
                         timeMode={timeMode}
+                        electronicTicketOnly={electronicTicketOnly}
                         onSelect={onSelectTrain}
                         selectedTrainNo={activeTrain?.trainNo || null}
                         refreshLiveNonce={refreshLiveNonce}

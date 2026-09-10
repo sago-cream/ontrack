@@ -4,7 +4,7 @@
   <h1>OnTrack</h1>
   <p>Check train status with zero taps.</p>
   <p>
-    <img alt="demo" src="https://raw.githubusercontent.com/Hsiii/OnTrack/main/apps/web/public/demo.png" width="280" />
+    <img alt="demo" src="https://raw.githubusercontent.com/sago-cream/ontrack/main/apps/web/public/demo.png" width="280" />
   </p>
   <a href="./README.zh.md">繁體中文</a>  
 </div>
@@ -34,8 +34,11 @@ and deployment endpoints.
 
 ## Install
 
+Download OnTrack for iPhone from the
+[App Store](https://apps.apple.com/tw/app/ontrack/id6784708806).
+
 Use the web app at [ontrack.hsichen.dev/app](https://ontrack.hsichen.dev/app),
-or build the native iOS and Android apps from this repository.
+or build the native Android app from this repository.
 
 ### Android (Chrome)
 
@@ -74,6 +77,7 @@ Deploy a development Worker after filling the D1 placeholder in
 `apps/worker/wrangler.jsonc`:
 
 ```sh
+bun run deploy:dev:dry-run
 bun run deploy:dev
 ```
 
@@ -128,8 +132,8 @@ credentials.
 cp apps/worker/wrangler.production.example.jsonc apps/worker/wrangler.production.jsonc
 ```
 
-3. Fill in your production route and D1 `database_id` in the ignored
-   `apps/worker/wrangler.production.jsonc`.
+3. Fill in the Cloudflare `account_id`, production route, and D1 `database_id`
+   in the ignored `apps/worker/wrangler.production.jsonc`.
 4. Set `CORS_ALLOWED_ORIGINS` in the production config to your web origin.
 5. Set Worker secrets as needed:
 
@@ -139,14 +143,24 @@ wrangler secret put TDX_CLIENT_SECRET --config apps/worker/wrangler.production.j
 wrangler secret put REFRESH_SECRET --config apps/worker/wrangler.production.jsonc
 ```
 
-6. Deploy:
+6. Validate the private config and run a production dry-run:
+
+```sh
+bun run deploy:prod:check
+bun run deploy:prod:dry-run
+```
+
+7. Deploy:
 
 ```sh
 bun run deploy
 ```
 
 Official maintainers also use the ignored production config, so production
-deploys do not require editing the tracked public config.
+deploys do not require editing the tracked public config. Never put Cloudflare
+account, zone, route, or D1 identifiers in tracked files; keep credentials in
+Wrangler secrets/provider storage. The deploy command refuses unresolved
+template placeholders.
 
 TDX credentials are optional for development because the Worker falls back to
 Visitor Mode when they are not configured.

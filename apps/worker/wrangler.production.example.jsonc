@@ -1,14 +1,15 @@
 {
     "$schema": "../../node_modules/wrangler/config-schema.json",
     "name": "ontrack",
+    "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
     "main": "src/index.ts",
     "compatibility_date": "2026-06-07",
     "vars": {
-        "CORS_ALLOWED_ORIGINS": "https://example.com",
+        "CORS_ALLOWED_ORIGINS": "https://YOUR_WEB_ORIGIN",
     },
     "routes": [
         {
-            "pattern": "example.com",
+            "pattern": "YOUR_WORKER_DOMAIN",
             "custom_domain": true,
         },
     ],
@@ -16,7 +17,7 @@
         {
             "binding": "DB",
             "database_name": "ontrack",
-            "database_id": "00000000-0000-0000-0000-000000000000",
+            "database_id": "YOUR_D1_DATABASE_ID",
             "migrations_dir": "d1/migrations",
         },
     ],
@@ -27,9 +28,7 @@
         "run_worker_first": true,
     },
     "triggers": {
-        "crons": [
-            "*/10 * * * *",
-        ],
+        "crons": ["*/10 * * * *"],
     },
     "observability": {
         "enabled": true,

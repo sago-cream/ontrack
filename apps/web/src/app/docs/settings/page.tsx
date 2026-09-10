@@ -73,9 +73,11 @@ export default function SettingsDocsPage() {
             <section className={styles.section} aria-labelledby='sharing'>
                 <h2 id='sharing'>Share Message Format</h2>
                 <p>
-                    The share format controls the text generated when sharing a
-                    train. Use arrival-only for short messages, or route and
-                    arrival when the recipient needs more context.
+                    Open the share message editor to write your own text and
+                    insert train fields such as time, train type, stations,
+                    duration, fare, delay, and line. Presets provide a quick
+                    starting point, and the preview shows the message before you
+                    share it.
                 </p>
             </section>
 

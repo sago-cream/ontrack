@@ -3,7 +3,6 @@ import SwiftUI
 import UIKit
 
 private let taipeiMainStationName = "臺北"
-private let taipeiCircularStationName = "臺北(環島)"
 private let scheduleRefreshInterval: TimeInterval = 5 * 60
 private let scheduleWarmupRetryDelayNanos: UInt64 = 4_000_000_000
 private let locationRefreshInterval: TimeInterval = 2 * 60
@@ -13,40 +12,6 @@ private let timePickerMinuteInterval = 10
 private let stationPickerAnimation = Animation.snappy(duration: 0.28, extraBounce: 0)
 private let supportURL = URL(string: "https://ontrack.hsichen.dev/docs/support")!
 private let privacyURL = URL(string: "https://ontrack.hsichen.dev/docs/privacy")!
-
-private enum ShareMessageFormat: String, CaseIterable, Identifiable {
-    case arrivalOnly
-    case routeArrival
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .arrivalOnly:
-            AppText.arrivalOnlyMessageFormat
-        case .routeArrival:
-            AppText.routeArrivalMessageFormat
-        }
-    }
-
-    func message(train: TrainInfo, origin: Station?, destination: Station) -> String {
-        let arrivalTime = TrainDisplay.adjustedTime(
-            train.arrivalTime,
-            delay: train.delay
-        )
-
-        switch self {
-        case .arrivalOnly:
-            return AppText.arrivalMessage(time: arrivalTime, station: destination.displayName)
-        case .routeArrival:
-            return AppText.routeArrivalMessage(
-                origin: origin?.displayName ?? AppText.origin,
-                destination: destination.displayName,
-                time: arrivalTime
-            )
-        }
-    }
-}
 
 private enum ActiveSheet: String, Identifiable {
     case timeEditor
@@ -109,21 +74,6 @@ private enum AppIconSetting: String, CaseIterable, Identifiable {
         }
     }
 
-    var accentColor: Color {
-        switch self {
-        case .primary:
-            OnTrackPalette(setting: .light).primary
-        case .dark:
-            OnTrackPalette(setting: .dark).primary
-        case .sage:
-            OnTrackPalette(setting: .sage).primary
-        case .amethyst:
-            OnTrackPalette(setting: .amethyst).primary
-        case .ember:
-            OnTrackPalette(setting: .ember).primary
-        }
-    }
-
     @MainActor static var current: AppIconSetting {
         let alternateIconName = UIApplication.shared.alternateIconName
         return allCases.first { $0.alternateIconName == alternateIconName } ?? .primary
@@ -142,20 +92,26 @@ struct ContentView: View {
     @AppStorage("ontrack_recent_origin_ids") private var recentOriginIDs = ""
     @AppStorage(AppPreferenceKey.language) private var languageCode = AppLanguageSetting.system.rawValue
     @AppStorage(AppPreferenceKey.appearance) private var appearanceRaw = AppAppearanceSetting.current.rawValue
-    @AppStorage(AppPreferenceKey.messageFormat) private var messageFormatRaw = ShareMessageFormat.arrivalOnly.rawValue
+    @AppStorage(AppPreferenceKey.messageFormat) private var messageFormatRaw = "arrivalOnly"
+    @AppStorage(AppPreferenceKey.electronicTicketOnly) private var electronicTicketOnly = false
+    @AppStorage(AppPreferenceKey.messageTemplate) private var messageTemplate = ""
 
     @StateObject private var locationService = LocationService()
     @StateObject private var supportPurchaseManager = SupportPurchaseManager()
+    @StateObject private var updateAvailabilityManager = UpdateAvailabilityManager()
     @State private var stations: [Station] = []
     @State private var timeSelection = TimeSelection.current()
     @State private var trains: [TrainInfo] = []
+    @State private var allScheduleTrains: [TrainInfo] = []
     @State private var selectedTrain: TrainInfo?
     @State private var isLoadingStations = false
     @State private var isLoadingSchedule = false
     @State private var isRefreshingLive = false
+    @State private var widgetLiveDataIsFresh = false
     @State private var errorMessage: String?
     @State private var stationPicker: StationPickerRole?
     @State private var originSource: OriginSelectionSource = .manual
+    @State private var locatedOriginId = ""
     @State private var destinationSource: DestinationSelectionSource = .cached
     @State private var activeSheet: ActiveSheet?
 
@@ -243,11 +199,12 @@ struct ContentView: View {
             return nil
         }
 
-        return AppText.plannedBoardingMessage(
-            type: TrainDisplay.trainType(selectedTrain.trainType),
-            number: selectedTrain.trainNo,
-            time: TrainDisplay.adjustedTime(selectedTrain.arrivalTime, delay: selectedTrain.delay),
-            station: destinationStation.displayName
+        return ShareMessageTemplate.message(
+            template: messageTemplate,
+            legacyFormatRaw: messageFormatRaw,
+            train: selectedTrain,
+            origin: originStation,
+            destination: destinationStation
         )
     }
 
@@ -258,7 +215,6 @@ struct ContentView: View {
             timeSelection.mode.rawValue,
             Formatters.scheduleDate.string(from: timeSelection.date),
             Formatters.displayTime.string(from: timeSelection.date),
-            canLoadSchedule ? "ready" : "pending",
         ].joined(separator: "-")
     }
 
@@ -280,16 +236,19 @@ struct ContentView: View {
             || ProcessInfo.processInfo.arguments.contains("--showcase-data")
     }
 
-    private var opensSupportScreenshot: Bool {
-        ProcessInfo.processInfo.environment["ONTRACK_SCREENSHOT_TARGET"] == "support"
+    private var opensSettingsScreenshot: Bool {
+        let target = ProcessInfo.processInfo.environment["ONTRACK_SCREENSHOT_TARGET"]
+        return target == "support"
+            || target == "update"
             || ProcessInfo.processInfo.arguments.contains("--screenshot-support")
+            || ProcessInfo.processInfo.arguments.contains("--screenshot-update")
     }
 #endif
 
     var body: some View {
         NavigationStack {
             ZStack {
-                palette.background
+                OnTrackTheme.background
                     .ignoresSafeArea()
 
                 GeometryReader { proxy in
@@ -322,9 +281,14 @@ struct ContentView: View {
 
                                     IconPlainButton(
                                         systemName: "gearshape",
+                                        showsIndicator: updateAvailabilityManager.isUpdateAvailable,
                                         action: presentSettings
                                     )
-                                    .accessibilityLabel(AppText.settings)
+                                    .accessibilityLabel(
+                                        updateAvailabilityManager.isUpdateAvailable
+                                            ? AppText.settingsUpdateAvailable
+                                            : AppText.settings
+                                    )
                                 }
                                 .padding(.horizontal, OnTrackTheme.space2)
 
@@ -332,10 +296,14 @@ struct ContentView: View {
                                     origin: originStation,
                                     destination: destinationStation,
                                     isLoading: isLoadingStations,
-                                    originGlyphColor: palette.dimText,
-                                    destinationGlyphColor: palette.primary,
+                                    locationAuthorizationStatus: locationService.authorizationStatus,
+                                    isLocationRequesting: locationService.isRequesting,
+                                    locatedOriginId: locatedOriginId,
+                                    originGlyphColor: OnTrackTheme.routeDot(for: appearanceSetting),
+                                    destinationGlyphColor: OnTrackTheme.routeFlag(for: appearanceSetting),
                                     onPickOrigin: { openStationPicker(.origin) },
                                     onPickDestination: { openStationPicker(.destination) },
+                                    onRequestLocationAccess: promptForAutoDetectedOrigin,
                                     onSwap: swapStations
                                 )
                             }
@@ -354,11 +322,10 @@ struct ContentView: View {
                             TrainBoardingPanel(
                                 message: shareMessage,
                                 selectedTrain: selectedTrain,
-                                destination: destinationStation,
                                 trains: trains,
                                 isLoading: isLoadingSchedule,
                                 canLoadSchedule: canLoadSchedule,
-                                onSelect: { selectedTrain = $0 }
+                                onSelect: selectTrain
                             )
                             .padding(.bottom, trainPanelBottomInset)
                             .transition(.move(edge: .bottom))
@@ -389,6 +356,10 @@ struct ContentView: View {
                     ))
                 }
             }
+            // Theme colors are read from preferences throughout the view tree. Give
+            // descendants a new identity so SwiftUI cannot reuse colors from the
+            // previously selected palette.
+            .id(appearanceRaw)
             .toolbar(.hidden, for: .navigationBar)
             .task {
                 await loadStations()
@@ -396,13 +367,20 @@ struct ContentView: View {
             .task {
                 await supportPurchaseManager.start()
             }
+            .task {
+                await updateAvailabilityManager.checkIfNeeded()
+            }
             .onAppear {
 #if DEBUG
                 guard !isShowcaseMode else {
                     return
                 }
 #endif
+                WidgetAppearanceStore.save(rawValue: appearanceRaw)
                 refreshAutoDetectedOrigin()
+            }
+            .onChange(of: appearanceRaw) { _, rawValue in
+                WidgetAppearanceStore.save(rawValue: rawValue)
             }
             .task(id: scheduleTaskID) {
                 await loadSchedule()
@@ -425,6 +403,9 @@ struct ContentView: View {
                 }
 
                 refreshAutoDetectedOrigin()
+                Task {
+                    await updateAvailabilityManager.checkIfNeeded()
+                }
             }
             .onChange(of: locationService.coordinate) { _, coordinate in
                 guard let coordinate else {
@@ -440,6 +421,9 @@ struct ContentView: View {
 
                 fallbackToCachedOrigin()
             }
+            .onChange(of: electronicTicketOnly) {
+                applyTrainFilter()
+            }
             .alert("OnTrack", isPresented: hasError) {
                 Button("OK", role: .cancel) {
                     errorMessage = nil
@@ -451,9 +435,8 @@ struct ContentView: View {
                 sheetContent(sheet)
             }
         }
-        .tint(palette.primary)
+        .tint(OnTrackTheme.primary)
         .preferredColorScheme(appearanceSetting.preferredColorScheme)
-        .environment(\.onTrackPalette, palette)
     }
 
     @ViewBuilder
@@ -467,22 +450,21 @@ struct ContentView: View {
 
         case .settings:
             SettingsSheet(
-                languageCode: $languageCode,
                 appearanceRaw: $appearanceRaw,
                 messageFormatRaw: $messageFormatRaw,
+                electronicTicketOnly: $electronicTicketOnly,
+                messageTemplate: $messageTemplate,
                 originName: originStation?.displayName,
                 destinationName: destinationStation?.displayName,
-                purchaseManager: supportPurchaseManager
+                purchaseManager: supportPurchaseManager,
+                updateAvailabilityManager: updateAvailabilityManager
             )
+            .id(appearanceRaw)
         }
     }
 
     private var appearanceSetting: AppAppearanceSetting {
         AppAppearanceSetting(rawValue: appearanceRaw) ?? AppAppearanceSetting.current
-    }
-
-    private var palette: OnTrackPalette {
-        OnTrackPalette(setting: appearanceSetting)
     }
 
     private var hasError: Binding<Bool> {
@@ -493,10 +475,6 @@ struct ContentView: View {
     }
 
     private func openStationPicker(_ role: StationPickerRole) {
-        if role == .origin {
-            promptForAutoDetectedOrigin()
-        }
-
         activeSheet = nil
 
         withAnimation(stationPickerAnimation) {
@@ -543,6 +521,8 @@ struct ContentView: View {
 
             resolveInitialStations(loadedStations)
             refreshAutoDetectedOrigin()
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -555,7 +535,7 @@ struct ContentView: View {
         destinationSource = .cached
         languageCode = AppLanguageSetting.zhTW.rawValue
         appearanceRaw = AppAppearanceSetting.light.rawValue
-        activeSheet = opensSupportScreenshot ? .settings : nil
+        activeSheet = opensSettingsScreenshot ? .settings : nil
 
         var components = Formatters.taipeiCalendar.dateComponents(
             [.year, .month, .day],
@@ -610,21 +590,56 @@ struct ContentView: View {
 
             guard let response, response.meta?.scheduleCacheStatus != .warming else {
                 trains = []
+                allScheduleTrains = []
                 selectedTrain = nil
+                widgetLiveDataIsFresh = false
+                WidgetSnapshotStore.clear()
                 return
             }
 
+            widgetLiveDataIsFresh = response.meta?.liveDataStatus == .fresh
+                && (response.meta?.liveDataAgeSeconds ?? 0) <= 15 * 60
             let display = TrainDisplay.displaySchedule(
-                trains: response.trains,
+                trains: electronicTicketOnly
+                    ? response.trains.filter(\.supportsElectronicTicket)
+                    : response.trains,
                 targetTime: timeSelection.scheduleTime,
                 timeMode: timeSelection.mode.scheduleMode
             )
             trains = display.trains
+            allScheduleTrains = response.trains
             selectedTrain = display.recommendedTrain
+            if let recommendedTrain = display.recommendedTrain {
+                persistWidgetSnapshot(for: recommendedTrain)
+            } else {
+                WidgetSnapshotStore.clear()
+            }
+        } catch is CancellationError {
+            return
         } catch {
             trains = []
+            allScheduleTrains = []
             selectedTrain = nil
+            widgetLiveDataIsFresh = false
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func applyTrainFilter() {
+        let display = TrainDisplay.displaySchedule(
+            trains: electronicTicketOnly
+                ? allScheduleTrains.filter(\.supportsElectronicTicket)
+                : allScheduleTrains,
+            targetTime: timeSelection.scheduleTime,
+            timeMode: timeSelection.mode.scheduleMode
+        )
+        trains = display.trains
+        selectedTrain = display.recommendedTrain
+
+        if let recommendedTrain = display.recommendedTrain {
+            persistWidgetSnapshot(for: recommendedTrain)
+        } else {
+            WidgetSnapshotStore.clear()
         }
     }
 
@@ -636,6 +651,69 @@ struct ContentView: View {
         Task {
             await loadSchedule(refreshLive: true)
         }
+    }
+
+    private func selectTrain(_ train: TrainInfo) {
+        selectedTrain = train
+        persistWidgetSnapshot(for: train)
+    }
+
+    private func persistWidgetSnapshot(for train: TrainInfo) {
+        guard let originStation, let destinationStation else {
+            return
+        }
+
+        WidgetRouteContextStore.save(WidgetRouteContext(
+            originID: originStation.id,
+            destinationID: destinationStation.id,
+            cachedOriginID: cachedOriginId,
+            frequentDestinationRecordsData: frequentDestinationRecordsData,
+            legacyDestinationIDs: legacyRecentDestinationIDs,
+            messageFormatRaw: messageFormatRaw,
+            messageTemplate: messageTemplate
+        ))
+
+        let widgetTrain = TrainInfo(
+            trainNo: train.trainNo,
+            trainType: train.trainType,
+            direction: train.direction,
+            originStation: train.originStation,
+            destinationStation: train.destinationStation,
+            departureTime: train.departureTime,
+            arrivalTime: train.arrivalTime,
+            tripLine: train.tripLine,
+            price: train.price,
+            delay: widgetLiveDataIsFresh ? train.delay : nil,
+            status: widgetLiveDataIsFresh ? train.status : .unknown
+        )
+        let primaryTrain = WidgetTrainSnapshot(
+            train: train,
+            liveDataIsFresh: widgetLiveDataIsFresh
+        )
+        let trainCards = Array(trains.prefix(3)).map {
+            WidgetTrainSnapshot(
+                train: $0,
+                liveDataIsFresh: widgetLiveDataIsFresh
+            )
+        }
+
+        WidgetSnapshotStore.save(WidgetSnapshot(
+            trainIdentifier: primaryTrain.trainIdentifier,
+            departureTime: primaryTrain.departureTime,
+            arrivalTime: primaryTrain.arrivalTime,
+            originName: originStation.displayName,
+            destinationName: destinationStation.displayName,
+            delayMinutes: primaryTrain.delayMinutes,
+            shareMessage: ShareMessageTemplate.message(
+                template: messageTemplate,
+                legacyFormatRaw: messageFormatRaw,
+                train: widgetTrain,
+                origin: originStation,
+                destination: destinationStation
+            ),
+            updatedAt: Date(),
+            trainCards: trainCards
+        ))
     }
 
     private func select(station: Station, for role: StationPickerRole) {
@@ -666,7 +744,7 @@ struct ContentView: View {
 
     private func resolveInitialStations(_ loadedStations: [Station]) {
         if originId.isEmpty, isKnownStation(cachedOriginId, in: loadedStations) {
-            setOrigin(cachedOriginId, source: .cached)
+            setOrigin(resolvePreferredStationId(cachedOriginId, in: loadedStations), source: .cached)
         }
 
         if originId.isEmpty {
@@ -684,7 +762,15 @@ struct ContentView: View {
     }
 
     private func promptForAutoDetectedOrigin() {
-        requestAutoDetectedOrigin(allowPermissionPrompt: true)
+        manualOriginSelectedAt = 0
+
+        if locationService.authorizationStatus == .denied,
+           let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsURL)
+            return
+        }
+
+        locationService.requestLocation()
     }
 
     private func refreshAutoDetectedOrigin() {
@@ -705,7 +791,7 @@ struct ContentView: View {
     }
 
     private func selectNearestOrigin(to coordinate: UserCoordinate) {
-        guard !stations.isEmpty, !isManualOriginProtected else {
+        guard !stations.isEmpty else {
             return
         }
 
@@ -727,7 +813,14 @@ struct ContentView: View {
             return
         }
 
-        setOrigin(resolvePreferredStationId(nearestStation.id), source: .geo)
+        let preferredStationId = resolvePreferredStationId(nearestStation.id)
+        locatedOriginId = preferredStationId
+
+        guard !isManualOriginProtected else {
+            return
+        }
+
+        setOrigin(preferredStationId, source: .geo)
         autoFillDestinationIfNeeded()
     }
 
@@ -736,7 +829,7 @@ struct ContentView: View {
             return
         }
 
-        setOrigin(cachedOriginId, source: .cached)
+        setOrigin(resolvePreferredStationId(cachedOriginId), source: .cached)
     }
 
     private func setOrigin(_ id: String, source: OriginSelectionSource, selectedAt: Date? = nil) {
@@ -792,12 +885,15 @@ struct ContentView: View {
         destinationSource = .auto
     }
 
-    private func resolvePreferredStationId(_ stationId: String) -> String {
-        guard stationMap[stationId]?.name == taipeiCircularStationName else {
+    private func resolvePreferredStationId(_ stationId: String, in candidateStations: [Station]? = nil) -> String {
+        let availableStations = candidateStations ?? stations
+        guard let station = availableStations.first(where: { $0.id == stationId }),
+              isTaipeiCircularStation(station)
+        else {
             return stationId
         }
 
-        return stations.first(where: { $0.name == taipeiMainStationName })?.id ?? stationId
+        return availableStations.first(where: { $0.name == taipeiMainStationName })?.id ?? stationId
     }
 
     private func isKnownStation(_ id: String, in stations: [Station]) -> Bool {
@@ -858,6 +954,7 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
     @Published var coordinate: UserCoordinate?
     @Published var locationErrorID: UUID?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var isRequesting = false
 
     private let manager = CLLocationManager()
 
@@ -870,16 +967,21 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
 
     func requestLocation() {
         locationErrorID = nil
+        coordinate = nil
         authorizationStatus = manager.authorizationStatus
 
         switch manager.authorizationStatus {
         case .notDetermined:
+            isRequesting = true
             manager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
+            isRequesting = true
             manager.requestLocation()
         case .denied, .restricted:
+            isRequesting = false
             locationErrorID = UUID()
         @unknown default:
+            isRequesting = false
             locationErrorID = UUID()
         }
     }
@@ -896,8 +998,10 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
 
             switch status {
             case .authorizedAlways, .authorizedWhenInUse:
+                isRequesting = true
                 self.manager.requestLocation()
             case .denied, .restricted:
+                isRequesting = false
                 locationErrorID = UUID()
             case .notDetermined:
                 break
@@ -918,12 +1022,14 @@ private final class LocationService: NSObject, ObservableObject, CLLocationManag
         )
 
         Task { @MainActor [weak self] in
+            self?.isRequesting = false
             self?.coordinate = updatedCoordinate
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor [weak self] in
+            self?.isRequesting = false
             self?.locationErrorID = UUID()
         }
     }
@@ -947,7 +1053,6 @@ private enum StationPickerRole: String, Identifiable {
 }
 
 private struct TimeSelectorView: View {
-    @Environment(\.onTrackPalette) private var palette
     @Binding var selection: TimeSelection
     let onEdit: () -> Void
 
@@ -969,11 +1074,11 @@ private struct TimeSelectorView: View {
             HStack(spacing: OnTrackTheme.space2) {
                 Text(title)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(OnTrackTheme.text)
 
                 Image(systemName: "chevron.down")
-                    .font(OnTrackFont.compactSymbol)
-                    .foregroundStyle(palette.dimText)
+                    .font(OnTrackFont.chevron)
+                    .foregroundStyle(OnTrackTheme.dimText)
             }
             .padding(.horizontal, OnTrackTheme.space4)
             .frame(minHeight: OnTrackTheme.iconButtonSize)
@@ -1016,7 +1121,6 @@ private struct TimeEditorSheet: View {
     let dateRange: ClosedRange<Date>
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.onTrackPalette) private var palette
     @State private var draft: TimeSelection
 
     private var modeSelection: Binding<TimeMode> {
@@ -1097,7 +1201,7 @@ private struct TimeEditorSheet: View {
         }
         .presentationDetents([.height(Self.detentHeight)])
         .presentationDragIndicator(.automatic)
-        .presentationBackground(palette.panel)
+        .presentationBackground(OnTrackTheme.panel)
     }
 
     private func content(availableWidth: CGFloat, bottomSafeAreaInset: CGFloat) -> some View {
@@ -1112,7 +1216,7 @@ private struct TimeEditorSheet: View {
 
             timeEditorFooter(bottomSafeAreaInset: bottomSafeAreaInset)
         }
-        .background(palette.panel)
+        .background(OnTrackTheme.panel)
     }
 
     private func timeEditorHeader(availableWidth: CGFloat) -> some View {
@@ -1122,8 +1226,8 @@ private struct TimeEditorSheet: View {
                     draft = .current(mode: .now)
                 } label: {
                     Image(systemName: "clock.arrow.trianglehead.2.counterclockwise.rotate.90")
-                        .font(OnTrackFont.symbol)
-                        .foregroundStyle(isNowSelected ? palette.primary : palette.dimText)
+                        .font(OnTrackFont.icon)
+                        .foregroundStyle(isNowSelected ? OnTrackTheme.primary : OnTrackTheme.dimText)
                         .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                 }
                 .buttonStyle(OnTrackPressButtonStyle())
@@ -1136,8 +1240,8 @@ private struct TimeEditorSheet: View {
                     draft.date = Self.lastTrainDate(for: draft.date)
                 } label: {
                     Image(systemName: "moon")
-                        .font(OnTrackFont.symbol)
-                        .foregroundStyle(isLastTrainSelected ? palette.primary : palette.dimText)
+                        .font(OnTrackFont.icon)
+                        .foregroundStyle(isLastTrainSelected ? OnTrackTheme.primary : OnTrackTheme.dimText)
                         .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                 }
                 .buttonStyle(OnTrackPressButtonStyle())
@@ -1168,8 +1272,8 @@ private struct TimeEditorSheet: View {
         Group {
             if draft.mode == .lastTrain {
                 Text(AppText.queryTodayLastTrain)
-                    .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .font(OnTrackFont.title)
+                    .foregroundStyle(OnTrackTheme.text)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .frame(height: Self.pickerHeight)
@@ -1185,7 +1289,7 @@ private struct TimeEditorSheet: View {
         .frame(maxWidth: .infinity)
         .frame(height: Self.pickerHeight)
         .clipped()
-        .tint(palette.primary)
+        .tint(OnTrackTheme.primary)
     }
 
     private func timeEditorFooter(bottomSafeAreaInset: CGFloat) -> some View {
@@ -1194,21 +1298,21 @@ private struct TimeEditorSheet: View {
                 Button(AppText.cancel) {
                     dismiss()
                 }
-                .font(OnTrackFont.control)
-                .foregroundStyle(palette.text)
+                .font(OnTrackFont.action)
+                .foregroundStyle(OnTrackTheme.text)
                 .frame(maxWidth: .infinity)
                 .frame(height: Self.footerButtonHeight)
 
                 Rectangle()
-                    .fill(palette.border)
+                    .fill(OnTrackTheme.border)
                     .frame(width: 1, height: Self.footerButtonHeight)
 
                 Button(AppText.done) {
                     selection = draft.mode == .now ? .current(mode: .now) : draft
                     dismiss()
                 }
-                .font(OnTrackFont.control)
-                .foregroundStyle(palette.primary)
+                .font(OnTrackFont.action)
+                .foregroundStyle(OnTrackTheme.primary)
                 .frame(maxWidth: .infinity)
                 .frame(height: Self.footerButtonHeight)
             }
@@ -1218,19 +1322,22 @@ private struct TimeEditorSheet: View {
                     .frame(height: bottomSafeAreaInset)
             }
         }
-        .background(palette.panel)
+        .background(OnTrackTheme.panel)
     }
 }
 
 private struct RouteSelectorView: View {
-    @Environment(\.onTrackPalette) private var palette
     let origin: Station?
     let destination: Station?
     let isLoading: Bool
+    let locationAuthorizationStatus: CLAuthorizationStatus
+    let isLocationRequesting: Bool
+    let locatedOriginId: String
     let originGlyphColor: Color
     let destinationGlyphColor: Color
     let onPickOrigin: () -> Void
     let onPickDestination: () -> Void
+    let onRequestLocationAccess: () -> Void
     let onSwap: () -> Void
     @State private var swapFeedbackTrigger = 0
 
@@ -1242,6 +1349,15 @@ private struct RouteSelectorView: View {
                 isLoading: isLoading,
                 glyph: .origin,
                 glyphColor: originGlyphColor,
+                trailingAction: AnyView(
+                    IconPlainButton(
+                        systemName: locationSystemName,
+                        isLoading: isLocationRequesting,
+                        color: isLocatedOrigin ? OnTrackTheme.primary : OnTrackTheme.dimText,
+                        action: onRequestLocationAccess
+                    )
+                    .accessibilityLabel(locationActionLabel)
+                ),
                 onTap: onPickOrigin
             )
 
@@ -1249,7 +1365,7 @@ private struct RouteSelectorView: View {
                 Color.clear
                     .frame(width: OnTrackTheme.routeGlyphColumnWidth, height: OnTrackTheme.routeDividerHeight)
                 Rectangle()
-                    .fill(palette.border)
+                    .fill(OnTrackTheme.border)
                     .frame(height: 1)
             }
             .padding(.leading, OnTrackTheme.space4)
@@ -1278,6 +1394,33 @@ private struct RouteSelectorView: View {
         }
         .onTrackPanelSurface(castsShadow: false)
         .sensoryFeedback(.selection, trigger: swapFeedbackTrigger)
+    }
+
+    private var hasLocationAuthorization: Bool {
+        locationAuthorizationStatus == .authorizedAlways
+            || locationAuthorizationStatus == .authorizedWhenInUse
+    }
+
+    private var isLocatedOrigin: Bool {
+        hasLocationAuthorization
+            && !locatedOriginId.isEmpty
+            && origin?.id == locatedOriginId
+    }
+
+    private var locationSystemName: String {
+        guard hasLocationAuthorization else {
+            return "location.slash"
+        }
+
+        return isLocatedOrigin ? "location.fill" : "location"
+    }
+
+    private var locationActionLabel: String {
+        guard hasLocationAuthorization else {
+            return AppText.enableLocationAccess
+        }
+
+        return isLocatedOrigin ? AppText.refreshLocatedOrigin : AppText.useCurrentLocation
     }
 }
 
@@ -1361,7 +1504,6 @@ private enum RouteGlyphKind {
 }
 
 private struct StationTrigger: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     let station: Station?
     let isLoading: Bool
@@ -1400,7 +1542,7 @@ private struct StationTrigger: View {
                     } else {
                         Text(station?.displayName ?? "")
                             .font(OnTrackFont.control)
-                            .foregroundStyle(palette.text)
+                            .foregroundStyle(OnTrackTheme.text)
                             .lineLimit(1)
                     }
 
@@ -1447,7 +1589,7 @@ private struct RouteGlyph: View {
                     .frame(width: OnTrackTheme.space2, height: OnTrackTheme.space2)
             case .destination:
                 Image(systemName: "flag")
-                    .font(OnTrackFont.compactSymbol)
+                    .font(OnTrackFont.routeGlyph)
                     .foregroundStyle(color)
             }
         }
@@ -1504,7 +1646,6 @@ private struct TrainListView: View {
 }
 
 private struct TrainCard: View {
-    @Environment(\.onTrackPalette) private var palette
     let train: TrainInfo
     let isSelected: Bool
     let onSelect: () -> Void
@@ -1516,29 +1657,35 @@ private struct TrainCard: View {
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: TrainPanelLayout.rowGap) {
-                timeCluster
-                    .frame(maxWidth: .infinity)
-                    .frame(height: TrainPanelLayout.topRowHeight)
-
                 HStack(spacing: OnTrackTheme.space2) {
-                    HStack(spacing: OnTrackTheme.space1) {
-                        trainIdentifier
+                    timeCluster
 
-                        if let tripLine = TrainDisplay.tripLine(train.tripLine) {
-                            Text("•")
-                                .accessibilityHidden(true)
-
-                            Text(tripLine)
-                        }
-                    }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .lineLimit(1)
+                    Spacer(minLength: OnTrackTheme.space2)
 
                     Text(TrainDisplay.price(train.price) ?? "")
-                        .frame(alignment: .trailing)
+                        .font(OnTrackFont.caption)
+                        .foregroundStyle(OnTrackTheme.dimText)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .frame(
+                            width: TrainPanelLayout.detailColumnWidth,
+                            alignment: .trailing
+                        )
                 }
-                .font(OnTrackFont.control)
-                .foregroundStyle(palette.dimText)
+                .frame(height: TrainPanelLayout.topRowHeight)
+
+                HStack(spacing: OnTrackTheme.space2) {
+                    trainIdentifier
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(TrainDisplay.tripLine(train.tripLine) ?? "")
+                        .frame(
+                            width: TrainPanelLayout.detailColumnWidth,
+                            alignment: .trailing
+                        )
+                }
+                .font(OnTrackFont.metadata.weight(.medium))
+                .foregroundStyle(OnTrackTheme.dimText)
                 .monospacedDigit()
                 .lineLimit(1)
                 .frame(height: TrainPanelLayout.bottomRowHeight)
@@ -1548,13 +1695,13 @@ private struct TrainCard: View {
             .frame(maxWidth: .infinity)
             .frame(height: TrainPanelLayout.trainCardHeight)
             .background(
-                isSelected ? palette.primarySubtle : palette.panel,
+                isSelected ? OnTrackTheme.primarySubtle : OnTrackTheme.panel,
                 in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
             )
             .contentShape(RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel))
             .overlay {
                 RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
-                    .strokeBorder(palette.border, lineWidth: 1)
+                    .strokeBorder(OnTrackTheme.border, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -1587,8 +1734,24 @@ private struct TrainCard: View {
     }
 
     private var trainIdentifier: some View {
-        Text("\(TrainDisplay.trainType(train.trainType)) \(train.trainNo)")
+        HStack(spacing: OnTrackTheme.space1) {
+            Text(TrainDisplay.trainType(train.trainType))
+                .foregroundStyle(trainTypeColor)
+
+            Text(train.trainNo)
+        }
         .minimumScaleFactor(0.85)
+    }
+
+    private var trainTypeColor: Color {
+        switch TrainDisplay.trainTypeEmphasis(train.trainType) {
+        case .neutral:
+            OnTrackTheme.dimText
+        case .mixed:
+            OnTrackTheme.primaryMixed
+        case .primary:
+            OnTrackTheme.primary
+        }
     }
 
     private var accessibilityLabel: String {
@@ -1607,7 +1770,6 @@ private struct TrainCard: View {
 }
 
 private struct TripSeparator: View {
-    @Environment(\.onTrackPalette) private var palette
     private static let minimumLineWidth: CGFloat = 4
 
     let duration: String
@@ -1618,7 +1780,7 @@ private struct TripSeparator: View {
 
             Text(duration)
                 .font(OnTrackFont.caption)
-                .foregroundStyle(palette.dimText)
+                .foregroundStyle(OnTrackTheme.dimText)
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -1626,19 +1788,18 @@ private struct TripSeparator: View {
 
             separatorLine
         }
-        .frame(minWidth: TrainPanelLayout.tripSeparatorWidth, maxWidth: .infinity)
+        .frame(width: TrainPanelLayout.tripSeparatorWidth)
     }
 
     private var separatorLine: some View {
         Rectangle()
-            .fill(palette.border)
+            .fill(OnTrackTheme.border)
             .frame(height: 1)
             .frame(minWidth: Self.minimumLineWidth, maxWidth: .infinity)
     }
 }
 
 private struct TimeColumn: View {
-    @Environment(\.onTrackPalette) private var palette
     let time: String
     let adjustedTime: String?
     let alignment: Alignment
@@ -1647,7 +1808,7 @@ private struct TimeColumn: View {
         ZStack {
             Text(time)
                 .font(OnTrackFont.time)
-                .foregroundStyle(palette.text)
+                .foregroundStyle(OnTrackTheme.text)
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
@@ -1671,7 +1832,6 @@ private struct TimeColumn: View {
 }
 
 private struct StationSearchView: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     let stations: [Station]
     let selectedStation: Station?
@@ -1709,7 +1869,7 @@ private struct StationSearchView: View {
                     || normalizedStationName.contains(normalizedEnglishSearch)
                     || station.id.localizedCaseInsensitiveContains(trimmedSearch)
 
-                guard matches, allowsCircularStation || station.name != taipeiCircularStationName else {
+                guard matches, allowsCircularStation || !isTaipeiCircularStation(station) else {
                     return nil
                 }
 
@@ -1736,7 +1896,11 @@ private struct StationSearchView: View {
     private var visibleAlgorithmicStations: [Station] {
         let coveredIDs = Set(searchMatches.map(\.id))
         return algorithmicStations
-            .filter { $0.id != selectedStation?.id && !coveredIDs.contains($0.id) }
+            .filter {
+                $0.id != selectedStation?.id
+                    && !coveredIDs.contains($0.id)
+                    && !isTaipeiCircularStation($0)
+            }
             .prefix(3)
             .map { $0 }
     }
@@ -1744,7 +1908,9 @@ private struct StationSearchView: View {
     private var visibleHistoryStations: [Station] {
         let coveredIDs = Set(searchMatches.map(\.id) + visibleAlgorithmicStations.map(\.id))
         let uncoveredHistory = historyStations.filter {
-            $0.id != selectedStation?.id && !coveredIDs.contains($0.id)
+            $0.id != selectedStation?.id
+                && !coveredIDs.contains($0.id)
+                && !isTaipeiCircularStation($0)
         }
 
         return searchMatches.isEmpty ? uncoveredHistory : Array(uncoveredHistory.prefix(2))
@@ -1760,7 +1926,7 @@ private struct StationSearchView: View {
         return stations.filter { station in
             station.id != selectedStation?.id
                 && !coveredIDs.contains(station.id)
-                && station.name != taipeiCircularStationName
+                && !isTaipeiCircularStation(station)
         }
     }
 
@@ -1772,7 +1938,7 @@ private struct StationSearchView: View {
     }
 
     private func selectedStation(_ station: Station) -> Station {
-        guard station.name == taipeiCircularStationName, !isCircularSearch(searchText) else {
+        guard isTaipeiCircularStation(station), !isCircularSearch(searchText) else {
             return station
         }
 
@@ -1797,6 +1963,7 @@ private struct StationSearchView: View {
             || normalizedValue.contains("loop")
             || normalizedValue.contains("round island")
             || normalizedValue.contains("around island")
+            || normalizedValue.contains("surround island")
     }
 
     private func dismissSearch() {
@@ -1820,8 +1987,8 @@ private struct StationSearchView: View {
         VStack(spacing: 0) {
             ZStack {
                 Text(title)
-                    .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .font(OnTrackFont.title)
+                    .foregroundStyle(OnTrackTheme.text)
                     .lineLimit(1)
 
                 HStack {
@@ -1830,7 +1997,7 @@ private struct StationSearchView: View {
                     Button(action: dismissSearch) {
                         Image(systemName: "xmark")
                             .font(OnTrackFont.symbol)
-                            .foregroundStyle(palette.dimText)
+                            .foregroundStyle(OnTrackTheme.dimText)
                             .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                     }
                     .buttonStyle(OnTrackPressButtonStyle())
@@ -1843,14 +2010,14 @@ private struct StationSearchView: View {
             VStack(spacing: 0) {
                 HStack(spacing: OnTrackTheme.space3) {
                     Image(systemName: "magnifyingglass")
-                        .font(OnTrackFont.symbol)
-                        .foregroundStyle(palette.dimText)
+                        .font(OnTrackFont.icon)
+                        .foregroundStyle(OnTrackTheme.dimText)
                         .frame(width: 24)
 
                     TextField(searchPlaceholder, text: $searchText)
                         .focused($isSearchFocused)
                         .font(OnTrackFont.control)
-                        .foregroundStyle(palette.text)
+                        .foregroundStyle(OnTrackTheme.text)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.search)
@@ -1861,7 +2028,7 @@ private struct StationSearchView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(OnTrackFont.symbol)
-                                .foregroundStyle(palette.dimText)
+                                .foregroundStyle(OnTrackTheme.dimText)
                                 .frame(width: OnTrackTheme.controlHeight, height: OnTrackTheme.controlHeight)
                         }
                         .buttonStyle(OnTrackPressButtonStyle())
@@ -1878,7 +2045,7 @@ private struct StationSearchView: View {
 
                 if !resultRows.isEmpty {
                     Rectangle()
-                        .fill(palette.border)
+                        .fill(OnTrackTheme.border)
                         .frame(height: 1)
 
                     ScrollView {
@@ -1903,8 +2070,8 @@ private struct StationSearchView: View {
         }
         .frame(maxWidth: OnTrackTheme.modalContentMaxWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(palette.background.ignoresSafeArea())
-        .tint(palette.primary)
+        .background(OnTrackTheme.background.ignoresSafeArea())
+        .tint(OnTrackTheme.primary)
         .task {
             isSearchFocused = true
         }
@@ -1946,10 +2113,12 @@ private enum StationSearchRowRole {
         }
     }
 
+    var iconColor: Color {
+        OnTrackTheme.dimText
+    }
 }
 
 private struct StationSearchRow: View {
-    @Environment(\.onTrackPalette) private var palette
     let station: Station
     let role: StationSearchRowRole
     let onSelect: () -> Void
@@ -1959,12 +2128,12 @@ private struct StationSearchRow: View {
             HStack(spacing: OnTrackTheme.space3) {
                 Image(systemName: role.iconSystemName)
                     .font(OnTrackFont.symbol)
-                    .foregroundStyle(palette.dimText)
+                    .foregroundStyle(role.iconColor)
                     .frame(width: 24)
 
                 Text(station.displayName)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(OnTrackTheme.text)
 
                 Spacer()
             }
@@ -1985,6 +2154,7 @@ private enum TrainPanelLayout {
     static let topRowHeight = OnTrackTheme.space6
     static let bottomRowHeight = OnTrackTheme.space6
     static let rowGap = OnTrackTheme.space1 / 2
+    static let detailColumnWidth = OnTrackTheme.space6 * 4
     static let timeColumnWidth = OnTrackTheme.space6 * 2 + OnTrackTheme.space2
     static let tripSeparatorWidth = OnTrackTheme.space6 * 2 + OnTrackTheme.space5
     static let delayTextOffset = OnTrackTheme.space3 + 2
@@ -2044,10 +2214,8 @@ private enum TrainPanelLayout {
 }
 
 private struct TrainBoardingPanel: View {
-    @Environment(\.onTrackPalette) private var palette
     let message: String?
     let selectedTrain: TrainInfo?
-    let destination: Station?
     let trains: [TrainInfo]
     let isLoading: Bool
     let canLoadSchedule: Bool
@@ -2106,7 +2274,7 @@ private struct TrainBoardingPanel: View {
 
     private var boardingSection: some View {
         VStack(alignment: .leading, spacing: TrainPanelLayout.headerGap) {
-            panelSectionHeader(AppText.expectedBoarding)
+            panelSectionHeader(AppText.shareInfo)
             shareCard
         }
     }
@@ -2116,7 +2284,7 @@ private struct TrainBoardingPanel: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(boardingSummary)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(selectedTrain == nil ? palette.dimText : palette.text)
+                    .foregroundStyle(selectedTrain == nil ? OnTrackTheme.dimText : OnTrackTheme.text)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .monospacedDigit()
@@ -2126,8 +2294,8 @@ private struct TrainBoardingPanel: View {
 
             ShareLink(item: message ?? "") {
                 Image(systemName: "square.and.arrow.up")
-                    .font(OnTrackFont.symbol)
-                    .foregroundStyle(message == nil ? palette.dimText : palette.primary)
+                    .font(OnTrackFont.icon)
+                    .foregroundStyle(message == nil ? OnTrackTheme.dimText : OnTrackTheme.primary)
                     .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
                     .contentShape(Rectangle())
             }
@@ -2144,22 +2312,17 @@ private struct TrainBoardingPanel: View {
     }
 
     private var boardingSummary: String {
-        guard let selectedTrain, let destination else {
-            return canLoadSchedule ? AppText.noTrainsAvailable : AppText.chooseRoute
+        if let message, !message.isEmpty {
+            return message
         }
 
-        return AppText.boardingSummary(
-            type: TrainDisplay.trainType(selectedTrain.trainType),
-            number: selectedTrain.trainNo,
-            time: TrainDisplay.adjustedTime(selectedTrain.arrivalTime, delay: selectedTrain.delay),
-            station: destination.displayName
-        )
+        return canLoadSchedule ? AppText.noTrainsAvailable : AppText.chooseRoute
     }
 
     private func panelSectionHeader(_ title: String) -> some View {
         Text(title)
             .font(OnTrackFont.control)
-            .foregroundStyle(palette.dimText)
+            .foregroundStyle(OnTrackTheme.dimText)
     }
 
 }
@@ -2169,15 +2332,19 @@ private struct SettingsSheet: View {
 
     private let headerHeight = OnTrackTheme.space5 + OnTrackTheme.iconButtonSize + OnTrackTheme.routeDividerHeight
 
-    @Binding var languageCode: String
     @Binding var appearanceRaw: String
     @Binding var messageFormatRaw: String
+    @Binding var electronicTicketOnly: Bool
+    @Binding var messageTemplate: String
     let originName: String?
     let destinationName: String?
     @ObservedObject var purchaseManager: SupportPurchaseManager
+    @ObservedObject var updateAvailabilityManager: UpdateAvailabilityManager
 
     @State private var selectedAppIconRaw = AppIconSetting.current.rawValue
     @State private var showsSupportThanks = false
+    @State private var editsMessageTemplate = false
+    @State private var messageSelection = NSRange(location: 0, length: 0)
 
     var body: some View {
         GeometryReader { proxy in
@@ -2189,8 +2356,8 @@ private struct SettingsSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.automatic)
-        .presentationBackground(palette.panel)
-        .tint(palette.primary)
+        .presentationBackground(OnTrackTheme.panel)
+        .tint(OnTrackTheme.primary)
         .preferredColorScheme(appearanceSetting.preferredColorScheme)
         .onChange(of: purchaseManager.thankYouDialogID) { _, dialogID in
             showsSupportThanks = dialogID > 0
@@ -2200,120 +2367,318 @@ private struct SettingsSheet: View {
         } message: {
             Text(AppText.supportThanksBody)
         }
-        .environment(\.onTrackPalette, palette)
     }
 
     private func content(topSafeAreaInset: CGFloat, bottomSafeAreaInset: CGFloat) -> some View {
         ZStack(alignment: .top) {
-            ScrollViewReader { scrollProxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if purchaseManager.isSupporter {
-                            SettingsAppIconGroup(
-                                selectedRawValue: $selectedAppIconRaw,
-                                onSelect: setAppIcon
-                            )
+            if editsMessageTemplate {
+                messageEditor(
+                    topSafeAreaInset: topSafeAreaInset,
+                    bottomSafeAreaInset: bottomSafeAreaInset
+                )
+            } else {
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            if let availableUpdate = updateAvailabilityManager.availableUpdate {
+                                SettingsUpdateGroup(
+                                    update: availableUpdate,
+                                    onIgnore: updateAvailabilityManager.ignoreAvailableUpdate
+                                )
+
+                                SettingsDivider()
+                            }
+
+                            if purchaseManager.isSupporter {
+                                SettingsAppIconGroup(
+                                    selectedRawValue: $selectedAppIconRaw,
+                                    onSelect: setAppIcon
+                                )
+
+                                SettingsDivider()
+                            }
+
+                            SettingsOptionGroup(title: AppText.theme) {
+                                ThemePicker(
+                                    settings: visibleAppearanceSettings,
+                                    selectedRawValue: appearanceRaw,
+                                    title: appearanceTitle
+                                ) { setting in
+                                    setAppearance(setting)
+                                }
+                            }
 
                             SettingsDivider()
-                        }
 
-                        SettingsOptionGroup(title: AppText.theme) {
-                            ThemePicker(
-                                settings: visibleAppearanceSettings,
-                                selectedRawValue: appearanceRaw,
-                                title: appearanceTitle
-                            ) { setting in
-                                setAppearance(setting)
-                            }
-                        }
-
-                        SettingsDivider()
-
-                        SettingsOptionGroup(title: AppText.defaultMessageFormat) {
-                            ForEach(ShareMessageFormat.allCases) { format in
-                                SettingsOptionButton(
-                                    title: format.title,
-                                    detail: messagePreview(for: format),
-                                    isSelected: messageFormatRaw == format.rawValue
+                            SettingsOptionGroup(title: AppText.defaultMessageFormat) {
+                                SettingsNavigationButton(
+                                    title: AppText.customizeShareMessage,
+                                    detail: currentMessagePreview
                                 ) {
-                                    messageFormatRaw = format.rawValue
+                                    migrateLegacyMessageTemplate()
+                                    editsMessageTemplate = true
                                 }
                             }
-                        }
 
-                        SettingsDivider()
+                            SettingsDivider()
 
-                        SettingsOptionGroup(title: AppText.language) {
-                            ForEach(AppLanguageSetting.allCases) { setting in
-                                SettingsOptionButton(
-                                    title: languageTitle(setting),
-                                    isSelected: languageCode == setting.rawValue
-                                ) {
-                                    languageCode = setting.rawValue
-                                }
+                            SettingsOptionGroup(title: AppText.trainFilters) {
+                                SettingsToggleRow(
+                                    title: AppText.electronicTicketOnly,
+                                    isOn: $electronicTicketOnly
+                                )
+                            }
+
+                            SettingsDivider()
+
+                            SettingsSupportGroup(purchaseManager: purchaseManager)
+                                .id(Self.supportScreenshotSectionID)
+
+                            SettingsDivider()
+
+                            SettingsOptionGroup(title: AppText.links) {
+                                SettingsLinkRow(
+                                    title: AppText.support,
+                                    systemName: "questionmark.circle",
+                                    url: supportURL
+                                )
+
+                                SettingsLinkRow(
+                                    title: AppText.privacyPolicy,
+                                    systemName: "hand.raised",
+                                    url: privacyURL
+                                )
                             }
                         }
-
-                        SettingsDivider()
-
-                        SettingsSupportGroup(purchaseManager: purchaseManager)
-                            .id(Self.supportScreenshotSectionID)
-
-                        SettingsDivider()
-
-                        SettingsOptionGroup(title: AppText.links) {
-                            SettingsLinkRow(
-                                title: AppText.support,
-                                systemName: "questionmark.circle",
-                                url: supportURL
-                            )
-
-                            SettingsLinkRow(
-                                title: AppText.privacyPolicy,
-                                systemName: "hand.raised",
-                                url: privacyURL
-                            )
-                        }
+                        .padding(.horizontal, OnTrackTheme.space5)
+                        .padding(.top, topSafeAreaInset + headerHeight + OnTrackTheme.space4)
+                        .padding(.bottom, OnTrackTheme.space5 + bottomSafeAreaInset)
+                        .frame(maxWidth: OnTrackTheme.modalContentMaxWidth, alignment: .leading)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.horizontal, OnTrackTheme.space5)
-                    .padding(.top, topSafeAreaInset + headerHeight + OnTrackTheme.space4)
-                    .padding(.bottom, OnTrackTheme.space5 + bottomSafeAreaInset)
-                    .frame(maxWidth: OnTrackTheme.modalContentMaxWidth, alignment: .leading)
-                    .frame(maxWidth: .infinity)
-                }
-                .scrollIndicators(.hidden)
+                    .scrollIndicators(.hidden)
 #if DEBUG
-                .onAppear {
-                    guard scrollsToSupportScreenshotSection else {
-                        return
-                    }
+                    .onAppear {
+                        guard scrollsToSupportScreenshotSection else {
+                            return
+                        }
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        scrollProxy.scrollTo(Self.supportScreenshotSectionID, anchor: .center)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            scrollProxy.scrollTo(Self.supportScreenshotSectionID, anchor: .center)
+                        }
                     }
-                }
 #endif
+                }
             }
 
             settingsHeader(topSafeAreaInset: topSafeAreaInset)
         }
-        .background(palette.panel)
+        .background(OnTrackTheme.panel)
     }
 
     private static let supportScreenshotSectionID = "support-ontrack-screenshot-section"
 
+    private func messageEditor(
+        topSafeAreaInset: CGFloat,
+        bottomSafeAreaInset: CGFloat
+    ) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: OnTrackTheme.space5) {
+                Text(AppText.shareMessageEditorIntro)
+                    .font(OnTrackFont.control)
+                    .foregroundStyle(OnTrackTheme.dimText)
+
+                VStack(alignment: .leading, spacing: OnTrackTheme.space2) {
+                    Text(AppText.preview)
+                        .font(OnTrackFont.label)
+                        .foregroundStyle(OnTrackTheme.dimText)
+                        .tracking(0.4)
+
+                    Text(currentMessagePreview.isEmpty ? AppText.messageEmptyPreview : currentMessagePreview)
+                        .font(OnTrackFont.control)
+                        .foregroundStyle(OnTrackTheme.text)
+                        .frame(maxWidth: .infinity, minHeight: OnTrackTheme.controlHeight, alignment: .leading)
+                        .padding(OnTrackTheme.space4)
+                        .background(
+                            OnTrackTheme.primarySubtle,
+                            in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+                        )
+                        .monospacedDigit()
+                }
+
+                VStack(alignment: .leading, spacing: OnTrackTheme.space3) {
+                    Text(AppText.message)
+                        .font(OnTrackFont.label)
+                        .foregroundStyle(OnTrackTheme.dimText)
+                        .tracking(0.4)
+
+                    MessageTemplateTextEditor(
+                        text: editableMessageTemplate,
+                        selectedRange: $messageSelection,
+                        textColor: UIColor(OnTrackTheme.text),
+                        tokenTextColor: UIColor(OnTrackTheme.primary),
+                        tokenBackgroundColor: UIColor(OnTrackTheme.primarySubtle)
+                    )
+                    .frame(minHeight: 128)
+                    .padding(OnTrackTheme.space1)
+                    .background(
+                        OnTrackTheme.background,
+                        in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+                    )
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(
+                                .adaptive(minimum: 92),
+                                spacing: OnTrackTheme.space2
+                            ),
+                        ],
+                        alignment: .leading,
+                        spacing: OnTrackTheme.space2
+                    ) {
+                        ForEach(ShareMessageTemplate.fields) { field in
+                            Button {
+                                insertMessageField(field)
+                            } label: {
+                                Text(field.title)
+                                    .font(OnTrackFont.label)
+                                    .foregroundStyle(OnTrackTheme.primary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .padding(.horizontal, OnTrackTheme.space3)
+                                    .frame(minHeight: OnTrackTheme.controlHeight)
+                                    .frame(maxWidth: .infinity)
+                                    .background(
+                                        OnTrackTheme.primarySubtle,
+                                        in: Capsule()
+                                    )
+                            }
+                            .buttonStyle(OnTrackPressButtonStyle())
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: OnTrackTheme.space2) {
+                    Text(AppText.presets)
+                        .font(OnTrackFont.label)
+                        .foregroundStyle(OnTrackTheme.dimText)
+                        .tracking(0.4)
+
+                    VStack(spacing: OnTrackTheme.space2) {
+                        ForEach(ShareMessageTemplate.presets) { preset in
+                            messagePresetButton(preset)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, OnTrackTheme.space5)
+            .padding(.top, topSafeAreaInset + headerHeight + OnTrackTheme.space4)
+            .padding(.bottom, OnTrackTheme.space5 + bottomSafeAreaInset)
+            .frame(maxWidth: OnTrackTheme.modalContentMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var editableMessageTemplate: Binding<String> {
+        Binding(
+            get: { currentMessageTemplate },
+            set: { template in
+                messageTemplate = template
+                messageFormatRaw = "custom"
+            }
+        )
+    }
+
+    private func insertMessageField(_ field: ShareMessageTemplate.Field) {
+        let source = currentMessageTemplate as NSString
+        let range = ShareMessageTemplate.templateRange(
+            forDisplayRange: messageSelection,
+            in: currentMessageTemplate
+        )
+        let nextTemplate = source.replacingCharacters(in: range, with: field.token)
+
+        editableMessageTemplate.wrappedValue = nextTemplate
+        messageSelection = NSRange(
+            location: messageSelection.location + 1,
+            length: 0
+        )
+    }
+
+    @ViewBuilder
+    private func messagePresetButton(_ preset: ShareMessageTemplate.Preset) -> some View {
+        let isSelected = currentMessageTemplate == preset.template
+        let preview = ShareMessageTemplate.render(
+            preset.template,
+            values: ShareMessageTemplate.sampleValues
+        )
+
+        Button {
+            editableMessageTemplate.wrappedValue = preset.template
+            messageSelection = NSRange(
+                location: ShareMessageTemplate.displayLength(preset.template),
+                length: 0
+            )
+        } label: {
+            HStack(spacing: OnTrackTheme.space3) {
+                VStack(alignment: .leading, spacing: OnTrackTheme.space1) {
+                    Text(preset.title)
+                        .font(OnTrackFont.control)
+                        .foregroundStyle(isSelected ? OnTrackTheme.primary : OnTrackTheme.text)
+
+                    Text(preview)
+                        .font(OnTrackFont.label)
+                        .foregroundStyle(OnTrackTheme.dimText)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Image(systemName: "checkmark")
+                    .font(OnTrackFont.symbol)
+                    .foregroundStyle(OnTrackTheme.primary)
+                    .frame(width: OnTrackTheme.space5)
+                    .opacity(isSelected ? 1 : 0)
+                    .accessibilityHidden(!isSelected)
+            }
+            .padding(.horizontal, OnTrackTheme.space4)
+            .padding(.vertical, OnTrackTheme.space3)
+            .frame(minHeight: OnTrackTheme.controlHeight)
+            .background(
+                isSelected ? OnTrackTheme.primarySubtle : OnTrackTheme.background,
+                in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel))
+        }
+        .buttonStyle(OnTrackPressButtonStyle())
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
     private func settingsHeader(topSafeAreaInset: CGFloat) -> some View {
         VStack(spacing: 0) {
             HStack {
-                Text(AppText.settings)
+                if editsMessageTemplate {
+                    Button {
+                        editsMessageTemplate = false
+                    } label: {
+                        Image(systemName: "arrow.left")
+                            .font(OnTrackFont.symbol)
+                            .foregroundStyle(OnTrackTheme.dimText)
+                            .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(OnTrackPressButtonStyle())
+                    .accessibilityLabel(AppText.back)
+                }
+
+                Text(editsMessageTemplate ? AppText.shareMessageEditor : AppText.settings)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(OnTrackTheme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button(action: dismiss.callAsFunction) {
                     Image(systemName: "xmark")
                         .font(OnTrackFont.symbol)
-                        .foregroundStyle(palette.dimText)
+                        .foregroundStyle(OnTrackTheme.dimText)
                         .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
                         .contentShape(Rectangle())
                 }
@@ -2327,15 +2692,11 @@ private struct SettingsSheet: View {
 
             SettingsDivider()
         }
-        .background(palette.panel)
+        .background(OnTrackTheme.panel)
     }
 
     private var appearanceSetting: AppAppearanceSetting {
         AppAppearanceSetting(rawValue: appearanceRaw) ?? AppAppearanceSetting.current
-    }
-
-    private var palette: OnTrackPalette {
-        OnTrackPalette(setting: appearanceSetting)
     }
 
 #if DEBUG
@@ -2357,15 +2718,18 @@ private struct SettingsSheet: View {
         destinationName ?? AppText.exampleDestinationStation
     }
 
-    private func languageTitle(_ setting: AppLanguageSetting) -> String {
-        switch setting {
-        case .system:
-            AppText.systemLanguage
-        case .zhTW:
-            AppText.traditionalChinese
-        case .en:
-            AppText.english
-        }
+    private var currentMessageTemplate: String {
+        ShareMessageTemplate.resolved(
+            messageTemplate,
+            legacyFormatRaw: messageFormatRaw
+        )
+    }
+
+    private var currentMessagePreview: String {
+        var values = ShareMessageTemplate.sampleValues
+        values["origin"] = previewOriginName
+        values["destination"] = previewDestinationName
+        return ShareMessageTemplate.render(currentMessageTemplate, values: values)
     }
 
     private func appearanceTitle(_ setting: AppAppearanceSetting) -> String {
@@ -2386,22 +2750,22 @@ private struct SettingsSheet: View {
     }
 
     private func setAppearance(_ setting: AppAppearanceSetting) {
+        UserDefaults.standard.set(setting.rawValue, forKey: AppPreferenceKey.appearance)
         appearanceRaw = setting.rawValue
     }
 
-    private func messagePreview(for format: ShareMessageFormat) -> String {
-        let time = "09:41"
+    private func migrateLegacyMessageTemplate() {
+        let resolvedTemplate = currentMessageTemplate
 
-        switch format {
-        case .arrivalOnly:
-            return AppText.arrivalMessage(time: time, station: previewDestinationName)
-        case .routeArrival:
-            return AppText.routeArrivalMessage(
-                origin: previewOriginName,
-                destination: previewDestinationName,
-                time: time
-            )
+        if messageTemplate.isEmpty {
+            messageTemplate = resolvedTemplate
+            messageFormatRaw = "custom"
         }
+
+        messageSelection = NSRange(
+            location: ShareMessageTemplate.displayLength(resolvedTemplate),
+            length: 0
+        )
     }
 
     private func setAppIcon(_ setting: AppIconSetting) {
@@ -2424,7 +2788,6 @@ private struct SettingsSheet: View {
 }
 
 private struct SettingsAppIconGroup: View {
-    @Environment(\.onTrackPalette) private var palette
     @Binding var selectedRawValue: String
     let onSelect: (AppIconSetting) -> Void
 
@@ -2444,7 +2807,7 @@ private struct SettingsAppIconGroup: View {
 
                             Text(setting.title)
                                 .font(OnTrackFont.caption)
-                                .foregroundStyle(palette.dimText)
+                                .foregroundStyle(OnTrackTheme.dimText)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.76)
                         }
@@ -2460,30 +2823,24 @@ private struct SettingsAppIconGroup: View {
 }
 
 private struct AppIconPreview: View {
-    @Environment(\.onTrackPalette) private var palette
     let setting: AppIconSetting
     let isSelected: Bool
 
     var body: some View {
         Image(setting.previewImageName)
-            .renderingMode(.original)
             .resizable()
             .scaledToFill()
-            .frame(width: 56, height: 56)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: palette.surfaceShadow, radius: 6, x: 0, y: 3)
-            .overlay {
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(
-                        isSelected ? setting.accentColor : palette.border,
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            }
+        .frame(width: 56, height: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: OnTrackTheme.surfaceShadow, radius: 6, x: 0, y: 3)
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(isSelected ? OnTrackTheme.primary : OnTrackTheme.border, lineWidth: isSelected ? 2 : 1)
+        }
     }
 }
 
 private struct ThemePicker: View {
-    @Environment(\.onTrackPalette) private var palette
     let settings: [AppAppearanceSetting]
     let selectedRawValue: String
     let title: (AppAppearanceSetting) -> String
@@ -2504,7 +2861,7 @@ private struct ThemePicker: View {
 
                         Text(title(setting))
                             .font(OnTrackFont.caption)
-                            .foregroundStyle(palette.dimText)
+                            .foregroundStyle(OnTrackTheme.dimText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.76)
                     }
@@ -2519,7 +2876,6 @@ private struct ThemePicker: View {
 }
 
 private struct ThemeSwatch: View {
-    @Environment(\.onTrackPalette) private var palette
     let setting: AppAppearanceSetting
     let isSelected: Bool
 
@@ -2537,16 +2893,54 @@ private struct ThemeSwatch: View {
             }
             .overlay {
                 Circle()
-                    .strokeBorder(
-                        isSelected ? OnTrackPalette(setting: setting).primary : palette.border,
-                        lineWidth: isSelected ? 2 : 1
-                    )
+                    .strokeBorder(isSelected ? OnTrackTheme.primary : OnTrackTheme.border, lineWidth: isSelected ? 2 : 1)
             }
     }
 }
 
+private struct SettingsUpdateGroup: View {
+    @Environment(\.openURL) private var openURL
+
+    let update: AppUpdate
+    let onIgnore: () -> Void
+
+    var body: some View {
+        SettingsOptionGroup(title: AppText.updateAvailable) {
+            VStack(alignment: .leading, spacing: OnTrackTheme.space3) {
+                if let releaseNotes = update.releaseNotes {
+                    Text(releaseNotes)
+                        .font(OnTrackFont.body)
+                        .foregroundStyle(OnTrackTheme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Button {
+                    openURL(update.storeURL)
+                } label: {
+                    Label(
+                        AppText.updateToVersion(update.version),
+                        systemImage: "arrow.down.circle"
+                    )
+                    .font(OnTrackFont.action)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: OnTrackTheme.controlHeight)
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: OnTrackTheme.radiusControl))
+
+                Button(AppText.ignoreThisVersion, action: onIgnore)
+                    .font(OnTrackFont.control)
+                    .foregroundStyle(OnTrackTheme.dimText)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: OnTrackTheme.controlHeight)
+                    .buttonStyle(OnTrackPressButtonStyle())
+            }
+            .padding(.vertical, OnTrackTheme.space2)
+        }
+    }
+}
+
 private struct SettingsSupportGroup: View {
-    @Environment(\.onTrackPalette) private var palette
     @ObservedObject var purchaseManager: SupportPurchaseManager
 
     var body: some View {
@@ -2578,13 +2972,13 @@ private struct SettingsSupportGroup: View {
                 if let statusMessage = purchaseManager.statusMessage {
                     Text(statusMessage)
                         .font(OnTrackFont.caption)
-                        .foregroundStyle(palette.dimText)
+                        .foregroundStyle(OnTrackTheme.dimText)
                 }
 
                 if !purchaseManager.isSupporter {
                     Text(AppText.supportOnTrackFootnote)
                         .font(OnTrackFont.caption)
-                        .foregroundStyle(palette.dimText)
+                        .foregroundStyle(OnTrackTheme.dimText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -2606,7 +3000,6 @@ private struct SettingsSupportGroup: View {
 }
 
 private struct SettingsActionButton: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     let systemName: String
     var isLoading = false
@@ -2620,18 +3013,18 @@ private struct SettingsActionButton: View {
                     if isLoading {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(palette.dimText)
+                            .tint(OnTrackTheme.dimText)
                     } else {
                         Image(systemName: systemName)
                             .font(OnTrackFont.symbol)
-                            .foregroundStyle(palette.dimText)
+                            .foregroundStyle(OnTrackTheme.dimText)
                     }
                 }
                 .frame(width: OnTrackTheme.space6, height: OnTrackTheme.space6)
 
                 Text(title)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(isDisabled ? palette.dimText : palette.text)
+                    .foregroundStyle(isDisabled ? OnTrackTheme.dimText : OnTrackTheme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
@@ -2648,7 +3041,6 @@ private struct SettingsActionButton: View {
 }
 
 private struct SettingsOptionGroup<Content: View>: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     @ViewBuilder let content: Content
 
@@ -2656,7 +3048,7 @@ private struct SettingsOptionGroup<Content: View>: View {
         VStack(alignment: .leading, spacing: OnTrackTheme.space2) {
             Text(title)
                 .font(OnTrackFont.label)
-                .foregroundStyle(palette.dimText)
+                .foregroundStyle(OnTrackTheme.dimText)
                 .tracking(0.4)
 
             VStack(spacing: 0) {
@@ -2667,8 +3059,20 @@ private struct SettingsOptionGroup<Content: View>: View {
     }
 }
 
+private struct SettingsToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(title, isOn: $isOn)
+            .font(OnTrackFont.control)
+            .foregroundStyle(OnTrackTheme.text)
+            .padding(.horizontal, OnTrackTheme.space4)
+            .frame(minHeight: OnTrackTheme.controlHeight)
+    }
+}
+
 private struct SettingsOptionButton: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     var detail: String?
     let isSelected: Bool
@@ -2679,7 +3083,7 @@ private struct SettingsOptionButton: View {
             HStack(spacing: OnTrackTheme.space3) {
                 Text(title)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(isSelected ? palette.primary : palette.text)
+                    .foregroundStyle(isSelected ? OnTrackTheme.primary : OnTrackTheme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
@@ -2688,7 +3092,7 @@ private struct SettingsOptionButton: View {
                 if let detail {
                     Text(detail)
                         .font(OnTrackFont.control)
-                        .foregroundStyle(palette.dimText)
+                        .foregroundStyle(OnTrackTheme.dimText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
                         .multilineTextAlignment(.trailing)
@@ -2697,7 +3101,7 @@ private struct SettingsOptionButton: View {
 
                 Image(systemName: "checkmark")
                     .font(OnTrackFont.symbol)
-                    .foregroundStyle(palette.primary)
+                    .foregroundStyle(OnTrackTheme.primary)
                     .frame(width: OnTrackTheme.space5)
                     .opacity(isSelected ? 1 : 0)
                     .accessibilityHidden(!isSelected)
@@ -2706,7 +3110,7 @@ private struct SettingsOptionButton: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: OnTrackTheme.controlHeight)
             .background(
-                isSelected ? palette.primarySubtle : Color.clear,
+                isSelected ? OnTrackTheme.primarySubtle : Color.clear,
                 in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusControl)
             )
             .contentShape(RoundedRectangle(cornerRadius: OnTrackTheme.radiusControl))
@@ -2716,18 +3120,257 @@ private struct SettingsOptionButton: View {
     }
 }
 
-private struct SettingsDivider: View {
-    @Environment(\.onTrackPalette) private var palette
+private struct SettingsNavigationButton: View {
+    let title: String
+    let detail: String
+    let action: () -> Void
 
     var body: some View {
+        Button(action: action) {
+            HStack(spacing: OnTrackTheme.space3) {
+                Text(title)
+                    .font(OnTrackFont.control)
+                    .foregroundStyle(OnTrackTheme.text)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(detail)
+                    .font(OnTrackFont.control)
+                    .foregroundStyle(OnTrackTheme.dimText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .multilineTextAlignment(.trailing)
+                    .layoutPriority(1)
+
+                Image(systemName: "chevron.right")
+                    .font(OnTrackFont.symbol)
+                    .foregroundStyle(OnTrackTheme.dimText)
+                    .frame(width: OnTrackTheme.space5)
+            }
+            .padding(.horizontal, OnTrackTheme.space4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: OnTrackTheme.controlHeight)
+            .background(
+                OnTrackTheme.background,
+                in: RoundedRectangle(cornerRadius: OnTrackTheme.radiusControl)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: OnTrackTheme.radiusControl))
+        }
+        .buttonStyle(OnTrackPressButtonStyle())
+    }
+}
+
+private struct MessageTemplateTextEditor: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var selectedRange: NSRange
+    let textColor: UIColor
+    let tokenTextColor: UIColor
+    let tokenBackgroundColor: UIColor
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .clear
+        textView.adjustsFontForContentSizeCategory = true
+        textView.allowsEditingTextAttributes = true
+        textView.accessibilityLabel = AppText.message
+        textView.textContainerInset = UIEdgeInsets(
+            top: OnTrackTheme.space2,
+            left: OnTrackTheme.space2,
+            bottom: OnTrackTheme.space2,
+            right: OnTrackTheme.space2
+        )
+        textView.textContainer.lineFragmentPadding = 0
+        textView.keyboardDismissMode = .interactive
+        textView.typingAttributes = baseAttributes
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.isUpdating = true
+
+        if Self.template(from: textView.attributedText) != text {
+            textView.attributedText = attributedText
+            textView.typingAttributes = baseAttributes
+        }
+
+        let displayLength = textView.attributedText.length
+        let location = min(selectedRange.location, displayLength)
+        let length = min(
+            selectedRange.length,
+            displayLength - location
+        )
+        let nextRange = NSRange(location: location, length: length)
+        if textView.selectedRange != nextRange {
+            textView.selectedRange = nextRange
+        }
+
+        context.coordinator.isUpdating = false
+    }
+
+    private var baseAttributes: [NSAttributedString.Key: Any] {
+        [
+            .font: UIFont.preferredFont(forTextStyle: .body),
+            .foregroundColor: textColor,
+        ]
+    }
+
+    private var attributedText: NSAttributedString {
+        let result = NSMutableAttributedString()
+        let source = text as NSString
+        var cursor = 0
+
+        while cursor < source.length {
+            let searchRange = NSRange(
+                location: cursor,
+                length: source.length - cursor
+            )
+            let nextField = ShareMessageTemplate.fields
+                .compactMap { field -> (NSRange, ShareMessageTemplate.Field)? in
+                    let range = source.range(of: field.token, range: searchRange)
+                    return range.location == NSNotFound ? nil : (range, field)
+                }
+                .min { $0.0.location < $1.0.location }
+
+            guard let (range, field) = nextField else {
+                result.append(NSAttributedString(
+                    string: source.substring(from: cursor),
+                    attributes: baseAttributes
+                ))
+                break
+            }
+
+            if range.location > cursor {
+                result.append(NSAttributedString(
+                    string: source.substring(
+                        with: NSRange(
+                            location: cursor,
+                            length: range.location - cursor
+                        )
+                    ),
+                    attributes: baseAttributes
+                ))
+            }
+
+            result.append(NSAttributedString(
+                attachment: MessageTemplateFieldAttachment(
+                    field: field,
+                    textColor: tokenTextColor,
+                    backgroundColor: tokenBackgroundColor
+                )
+            ))
+            cursor = NSMaxRange(range)
+        }
+
+        return result
+    }
+
+    private static func template(from attributedText: NSAttributedString?) -> String {
+        guard let attributedText else { return "" }
+
+        var template = ""
+        attributedText.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedText.length)
+        ) { value, range, _ in
+            if let attachment = value as? MessageTemplateFieldAttachment {
+                template += attachment.templateToken
+            } else {
+                template += attributedText.attributedSubstring(from: range).string
+            }
+        }
+        return template
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: MessageTemplateTextEditor
+        var isUpdating = false
+
+        init(parent: MessageTemplateTextEditor) {
+            self.parent = parent
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard !isUpdating else { return }
+            parent.text = MessageTemplateTextEditor.template(
+                from: textView.attributedText
+            )
+            textView.typingAttributes = parent.baseAttributes
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard !isUpdating else { return }
+            parent.selectedRange = textView.selectedRange
+            textView.typingAttributes = parent.baseAttributes
+        }
+    }
+}
+
+private final class MessageTemplateFieldAttachment: NSTextAttachment {
+    let templateToken: String
+
+    init(
+        field: ShareMessageTemplate.Field,
+        textColor: UIColor,
+        backgroundColor: UIColor
+    ) {
+        templateToken = field.token
+        super.init(data: nil, ofType: nil)
+
+        let font = UIFont.preferredFont(forTextStyle: .caption1)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor,
+        ]
+        let textSize = (field.title as NSString).size(withAttributes: attributes)
+        let size = CGSize(
+            width: ceil(textSize.width) + OnTrackTheme.space4,
+            height: OnTrackTheme.space6 + OnTrackTheme.space1
+        )
+        let renderer = UIGraphicsImageRenderer(size: size)
+        image = renderer.image { _ in
+            backgroundColor.setFill()
+            UIBezierPath(
+                roundedRect: CGRect(origin: .zero, size: size),
+                cornerRadius: size.height / 2
+            ).fill()
+
+            (field.title as NSString).draw(
+                at: CGPoint(
+                    x: OnTrackTheme.space2,
+                    y: (size.height - textSize.height) / 2
+                ),
+                withAttributes: attributes
+            )
+        }
+        bounds = CGRect(
+            x: 0,
+            y: -OnTrackTheme.space2,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+}
+
+private struct SettingsDivider: View {
+    var body: some View {
         Rectangle()
-            .fill(palette.border)
+            .fill(OnTrackTheme.border)
             .frame(height: 1)
     }
 }
 
 private struct SettingsLinkRow: View {
-    @Environment(\.onTrackPalette) private var palette
     let title: String
     let systemName: String
     let url: URL
@@ -2737,15 +3380,15 @@ private struct SettingsLinkRow: View {
             HStack(spacing: OnTrackTheme.space3) {
                 Label(title, systemImage: systemName)
                     .font(OnTrackFont.control)
-                    .foregroundStyle(palette.text)
+                    .foregroundStyle(OnTrackTheme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
 
                 Spacer()
 
                 Image(systemName: "arrow.up.right")
-                    .font(OnTrackFont.symbol)
-                    .foregroundStyle(palette.dimText)
+                    .font(OnTrackFont.accessory)
+                    .foregroundStyle(OnTrackTheme.dimText)
             }
             .padding(.horizontal, OnTrackTheme.space4)
             .frame(minHeight: OnTrackTheme.controlHeight)
@@ -2767,9 +3410,10 @@ private struct IconSquareButton: View {
 }
 
 private struct IconPlainButton: View {
-    @Environment(\.onTrackPalette) private var palette
     let systemName: String
     var isLoading = false
+    var color = OnTrackTheme.dimText
+    var showsIndicator = false
     let action: () -> Void
 
     var body: some View {
@@ -2778,21 +3422,29 @@ private struct IconPlainButton: View {
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(palette.dimText)
+                        .tint(color)
                 } else {
                     Image(systemName: systemName)
-                        .font(OnTrackFont.symbol)
-                        .foregroundStyle(palette.dimText)
+                        .font(OnTrackFont.icon)
+                        .foregroundStyle(color)
                 }
             }
             .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
+            .overlay(alignment: .topTrailing) {
+                if showsIndicator {
+                    Circle()
+                        .fill(OnTrackTheme.primary)
+                        .frame(width: OnTrackTheme.space2, height: OnTrackTheme.space2)
+                        .padding(OnTrackTheme.space2)
+                        .accessibilityHidden(true)
+                }
+            }
         }
         .buttonStyle(OnTrackPressButtonStyle())
     }
 }
 
 private struct IconSquare: View {
-    @Environment(\.onTrackPalette) private var palette
     let systemName: String
     var isLoading = false
 
@@ -2801,11 +3453,11 @@ private struct IconSquare: View {
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
-                    .tint(palette.dimText)
+                    .tint(OnTrackTheme.dimText)
             } else {
                 Image(systemName: systemName)
-                    .font(OnTrackFont.symbol)
-                    .foregroundStyle(palette.dimText)
+                    .font(OnTrackFont.icon)
+                    .foregroundStyle(OnTrackTheme.dimText)
             }
         }
             .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
@@ -2819,7 +3471,7 @@ private struct PanelActionIcon: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(OnTrackFont.symbol)
+            .font(OnTrackFont.icon)
             .foregroundStyle(color)
             .frame(width: OnTrackTheme.iconButtonSize, height: OnTrackTheme.iconButtonSize)
             .contentShape(Rectangle())
@@ -2827,13 +3479,12 @@ private struct PanelActionIcon: View {
 }
 
 private struct EmptyPanel: View {
-    @Environment(\.onTrackPalette) private var palette
     let message: String
 
     var body: some View {
         Text(message)
             .font(OnTrackFont.body)
-            .foregroundStyle(palette.dimText)
+            .foregroundStyle(OnTrackTheme.dimText)
             .frame(maxWidth: .infinity)
             .padding(OnTrackTheme.space5)
             .onTrackPanelSurface()
@@ -2841,13 +3492,12 @@ private struct EmptyPanel: View {
 }
 
 private struct PanelEmptyState: View {
-    @Environment(\.onTrackPalette) private var palette
     let message: String
 
     var body: some View {
         Text(message)
             .font(OnTrackFont.body)
-            .foregroundStyle(palette.dimText)
+            .foregroundStyle(OnTrackTheme.dimText)
             .frame(maxWidth: .infinity, minHeight: TrainPanelLayout.cardHeight)
             .padding(.horizontal, OnTrackTheme.space4)
             .onTrackPanelSurface()
@@ -2855,11 +3505,9 @@ private struct PanelEmptyState: View {
 }
 
 private struct SkeletonTrainCard: View {
-    @Environment(\.onTrackPalette) private var palette
-
     var body: some View {
         RoundedRectangle(cornerRadius: OnTrackTheme.radiusPanel)
-            .fill(palette.panel)
+            .fill(OnTrackTheme.panel)
             .frame(height: TrainPanelLayout.trainCardHeight)
             .onTrackSurfaceRing(castsShadow: false)
             .opacity(0.7)
@@ -2879,101 +3527,58 @@ private struct OnTrackPressButtonStyle: ButtonStyle {
 }
 
 private enum OnTrackFont {
-    private static let compact = Font.system(size: 12)
-    private static let standard = Font.system(size: 18)
-
-    static let body = standard
-    static let caption = compact
-    static let captionStrong = compact.weight(.bold)
-    static let compactSymbol = compact.weight(.bold)
-    static let control = standard.weight(.semibold)
-    static let label = compact.weight(.medium)
-    static let symbol = standard.weight(.semibold)
-    static let time = standard.weight(.bold)
+    static let accessory = Font.subheadline.weight(.semibold)
+    static let action = Font.body.weight(.semibold)
+    static let body = Font.body
+    static let caption = Font.caption
+    static let captionStrong = Font.caption.weight(.bold)
+    static let chevron = Font.caption.weight(.bold)
+    static let control = Font.body.weight(.semibold)
+    static let icon = Font.title3.weight(.semibold)
+    static let label = Font.caption.weight(.medium)
+    static let metadata = Font.subheadline
+    static let routeGlyph = Font.caption.weight(.bold)
+    static let symbol = Font.body.weight(.semibold)
+    static let time = Font.subheadline.weight(.bold)
+    static let title = Font.headline
 }
 
 private extension View {
     func onTrackPanelSurface(
         cornerRadius: CGFloat = OnTrackTheme.radiusPanel,
-        ringColor: Color? = nil,
+        ringColor: Color = OnTrackTheme.border,
         castsShadow: Bool = true
     ) -> some View {
-        modifier(OnTrackPanelSurfaceModifier(
-            cornerRadius: cornerRadius,
-            ringColor: ringColor,
-            castsShadow: castsShadow
-        ))
+        background(OnTrackTheme.panel, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .onTrackSurfaceRing(cornerRadius: cornerRadius, ringColor: ringColor, castsShadow: castsShadow)
     }
 
     func onTrackSurfaceRing(
         cornerRadius: CGFloat = OnTrackTheme.radiusPanel,
-        ringColor: Color? = nil,
+        ringColor: Color = OnTrackTheme.border,
         castsShadow: Bool = true
     ) -> some View {
-        modifier(OnTrackSurfaceRingModifier(
-            cornerRadius: cornerRadius,
-            ringColor: ringColor,
-            castsShadow: castsShadow
-        ))
+        overlay {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(ringColor, lineWidth: 1)
+        }
+        .shadow(
+            color: castsShadow ? OnTrackTheme.surfaceShadow : .clear,
+            radius: castsShadow ? 8 : 0,
+            x: 0,
+            y: castsShadow ? 4 : 0
+        )
     }
 
     func onTrackCircleSurface() -> some View {
-        modifier(OnTrackCircleSurfaceModifier())
-    }
-}
-
-private struct OnTrackPanelSurfaceModifier: ViewModifier {
-    @Environment(\.onTrackPalette) private var palette
-
-    let cornerRadius: CGFloat
-    let ringColor: Color?
-    let castsShadow: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .background(palette.panel, in: RoundedRectangle(cornerRadius: cornerRadius))
-            .modifier(OnTrackSurfaceRingModifier(
-                cornerRadius: cornerRadius,
-                ringColor: ringColor,
-                castsShadow: castsShadow
-            ))
-    }
-}
-
-private struct OnTrackSurfaceRingModifier: ViewModifier {
-    @Environment(\.onTrackPalette) private var palette
-
-    let cornerRadius: CGFloat
-    let ringColor: Color?
-    let castsShadow: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(ringColor ?? palette.border, lineWidth: 1)
-            }
-            .shadow(
-                color: castsShadow ? palette.surfaceShadow : .clear,
-                radius: castsShadow ? 8 : 0,
-                x: 0,
-                y: castsShadow ? 4 : 0
-            )
-    }
-}
-
-private struct OnTrackCircleSurfaceModifier: ViewModifier {
-    @Environment(\.onTrackPalette) private var palette
-
-    func body(content: Content) -> some View {
-        content
-            .background(palette.panel, in: Circle())
+        background(OnTrackTheme.panel, in: Circle())
             .overlay {
                 Circle()
-                    .stroke(palette.border, lineWidth: 1)
+                    .stroke(OnTrackTheme.border, lineWidth: 1)
             }
-            .shadow(color: palette.surfaceShadow, radius: 8, x: 0, y: 4)
+            .shadow(color: OnTrackTheme.surfaceShadow, radius: 8, x: 0, y: 4)
     }
+
 }
 
 private extension AppAppearanceSetting {
@@ -3006,14 +3611,9 @@ private extension AppAppearanceSetting {
     }
 }
 
-private struct OnTrackPalette: Equatable {
-    private static let lightAccent = UIColor(red: 53 / 255, green: 125 / 255, blue: 233 / 255, alpha: 1)
-    private static let darkAccent = UIColor(red: 96 / 255, green: 165 / 255, blue: 250 / 255, alpha: 1)
-
-    let setting: AppAppearanceSetting
-
-    var background: Color {
-        switch setting {
+private enum OnTrackTheme {
+    static var background: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 246 / 255, green: 250 / 255, blue: 244 / 255)
         case .amethyst:
@@ -3024,14 +3624,14 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: UIColor(red: 248 / 255, green: 250 / 255, blue: 252 / 255, alpha: 1),
             dark: UIColor(red: 15 / 255, green: 23 / 255, blue: 42 / 255, alpha: 1)
         )
     }
 
-    var panel: Color {
-        switch setting {
+    static var panel: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 255 / 255, green: 255 / 255, blue: 252 / 255)
         case .amethyst:
@@ -3042,14 +3642,14 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: .white,
             dark: UIColor(red: 30 / 255, green: 41 / 255, blue: 59 / 255, alpha: 1)
         )
     }
 
-    var border: Color {
-        switch setting {
+    static var border: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 101 / 255, green: 145 / 255, blue: 87 / 255).opacity(0.18)
         case .amethyst:
@@ -3060,14 +3660,14 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: UIColor.black.withAlphaComponent(0.10),
             dark: UIColor.white.withAlphaComponent(0.10)
         )
     }
 
-    var text: Color {
-        switch setting {
+    static var text: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 25 / 255, green: 42 / 255, blue: 24 / 255)
         case .amethyst:
@@ -3078,13 +3678,25 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: UIColor(red: 15 / 255, green: 23 / 255, blue: 42 / 255, alpha: 1),
             dark: UIColor(red: 241 / 255, green: 245 / 255, blue: 249 / 255, alpha: 1)
         )
     }
 
-    var dimText: Color {
+    static var dimText: Color {
+        dimText(for: AppAppearanceSetting.current)
+    }
+
+    static func routeDot(for setting: AppAppearanceSetting) -> Color {
+        dimText(for: setting)
+    }
+
+    static func routeFlag(for setting: AppAppearanceSetting) -> Color {
+        primary(for: setting)
+    }
+
+    private static func dimText(for setting: AppAppearanceSetting) -> Color {
         switch setting {
         case .sage:
             return Color(red: 83 / 255, green: 105 / 255, blue: 74 / 255)
@@ -3096,13 +3708,17 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: UIColor(red: 71 / 255, green: 85 / 255, blue: 105 / 255, alpha: 1),
             dark: UIColor(red: 148 / 255, green: 163 / 255, blue: 184 / 255, alpha: 1)
         )
     }
 
-    var primary: Color {
+    static var primary: Color {
+        primary(for: AppAppearanceSetting.current)
+    }
+
+    private static func primary(for setting: AppAppearanceSetting) -> Color {
         switch setting {
         case .sage:
             Color(red: 101 / 255, green: 145 / 255, blue: 87 / 255)
@@ -3110,37 +3726,54 @@ private struct OnTrackPalette: Equatable {
             Color(red: 173 / 255, green: 150 / 255, blue: 218 / 255)
         case .ember:
             Color(red: 209 / 255, green: 105 / 255, blue: 35 / 255)
-        case .light:
-            Color(Self.lightAccent)
-        case .dark:
-            Color(Self.darkAccent)
-        case .system:
-            Self.adaptiveColor(light: Self.lightAccent, dark: Self.darkAccent)
+        case .system, .light, .dark:
+            Color(red: 53 / 255, green: 125 / 255, blue: 233 / 255)
         }
     }
 
-    var primarySubtle: Color {
-        switch setting {
+    static var primaryMixed: Color {
+        switch AppAppearanceSetting.current {
+        case .sage:
+            Color(red: 92 / 255, green: 125 / 255, blue: 81 / 255)
+        case .amethyst:
+            Color(red: 181 / 255, green: 164 / 255, blue: 216 / 255)
+        case .ember:
+            Color(red: 207 / 255, green: 145 / 255, blue: 104 / 255)
+        case .light:
+            Color(red: 62 / 255, green: 105 / 255, blue: 169 / 255)
+        case .dark:
+            Color(red: 101 / 255, green: 144 / 255, blue: 209 / 255)
+        case .system:
+            adaptiveColor(
+                light: UIColor(red: 62 / 255, green: 105 / 255, blue: 169 / 255, alpha: 1),
+                dark: UIColor(red: 101 / 255, green: 144 / 255, blue: 209 / 255, alpha: 1)
+            )
+        }
+    }
+
+    static var primarySubtle: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 101 / 255, green: 145 / 255, blue: 87 / 255).opacity(0.14)
         case .amethyst:
             return Color(red: 173 / 255, green: 150 / 255, blue: 218 / 255).opacity(0.22)
         case .ember:
             return Color(red: 209 / 255, green: 105 / 255, blue: 35 / 255).opacity(0.22)
-        case .light:
-            return Color(Self.lightAccent).opacity(0.12)
-        case .dark:
-            return Color(Self.darkAccent).opacity(0.20)
-        case .system:
-            return Self.adaptiveColor(
-                light: Self.lightAccent.withAlphaComponent(0.12),
-                dark: Self.darkAccent.withAlphaComponent(0.20)
-            )
+        case .system, .light, .dark:
+            break
         }
+
+        return adaptiveColor(
+            light: UIColor(red: 53 / 255, green: 125 / 255, blue: 233 / 255, alpha: 0.12),
+            dark: UIColor(red: 53 / 255, green: 125 / 255, blue: 233 / 255, alpha: 0.20)
+        )
     }
 
-    var surfaceShadow: Color {
-        switch setting {
+    static let danger = Color(red: 239 / 255, green: 68 / 255, blue: 68 / 255)
+    static let success = Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255)
+
+    static var surfaceShadow: Color {
+        switch AppAppearanceSetting.current {
         case .sage:
             return Color(red: 34 / 255, green: 65 / 255, blue: 28 / 255).opacity(0.07)
         case .amethyst:
@@ -3151,33 +3784,11 @@ private struct OnTrackPalette: Equatable {
             break
         }
 
-        return Self.adaptiveColor(
+        return adaptiveColor(
             light: UIColor.black.withAlphaComponent(0.04),
             dark: UIColor.black.withAlphaComponent(0.12)
         )
     }
-
-    private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
-        Color(UIColor { traitCollection in
-            traitCollection.userInterfaceStyle == .dark ? dark : light
-        })
-    }
-}
-
-private struct OnTrackPaletteKey: EnvironmentKey {
-    static let defaultValue = OnTrackPalette(setting: .light)
-}
-
-private extension EnvironmentValues {
-    var onTrackPalette: OnTrackPalette {
-        get { self[OnTrackPaletteKey.self] }
-        set { self[OnTrackPaletteKey.self] = newValue }
-    }
-}
-
-private enum OnTrackTheme {
-    static let danger = Color(red: 239 / 255, green: 68 / 255, blue: 68 / 255)
-    static let success = Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255)
 
     static let radiusControl: CGFloat = 8
     static let radiusPanel: CGFloat = 12
@@ -3198,6 +3809,11 @@ private enum OnTrackTheme {
     static let space5: CGFloat = 20
     static let space6: CGFloat = 24
 
+    private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark ? dark : light
+        })
+    }
 }
 
 #Preview {

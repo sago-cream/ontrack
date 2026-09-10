@@ -206,7 +206,7 @@ export default function HomePage() {
                 <footer className={styles.footer}>
                     <span>© 2026 OnTrack</span>
                     <nav aria-label='Support links'>
-                        <Link href='https://github.com/Hsiii/OnTrack'>
+                        <Link href='https://github.com/sago-cream/ontrack'>
                             GitHub
                         </Link>
                         <Link href='/docs/support'>支援</Link>

@@ -1,4 +1,5 @@
 import destinationAutofillConfig from '../../../shared/destination-autofill.json';
+import { isTaipeiCircularStation } from './stationSearchUtils';
 
 const FREQUENT_DESTINATIONS_KEY = 'ontrack_frequent_destinations';
 const LEGACY_RECENT_STATIONS_KEY = 'ontrack_recent_stations';
@@ -236,7 +237,10 @@ function getDestinationCandidates(
     const candidates = new Map<string, DestinationCandidate>();
 
     stations.forEach((station) => {
-        if (isValidStationId(station.id)) {
+        if (
+            isValidStationId(station.id) &&
+            !isTaipeiCircularStation({ name: station.name ?? '' })
+        ) {
             candidates.set(station.id, station);
         }
     });

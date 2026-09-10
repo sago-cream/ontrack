@@ -4,6 +4,7 @@ import {
     getManualLiveRefreshClientBucket,
     normalizeScheduleDate,
     resolveScheduleStations,
+    shouldRefreshLiveBoardForManual,
 } from '../src/policy';
 import type { Station } from '../src/types';
 
@@ -47,6 +48,23 @@ describe('resolveScheduleStations', () => {
     test('rejects unknown origin or destination IDs', () => {
         expect(resolveScheduleStations(STATIONS, 'FAKE-1', '1020')).toBeNull();
         expect(resolveScheduleStations(STATIONS, '1000', 'FAKE-2')).toBeNull();
+    });
+});
+
+describe('shouldRefreshLiveBoardForManual', () => {
+    test('keeps live data cached through the five-minute boundary', () => {
+        expect(shouldRefreshLiveBoardForManual(true, 0)).toBeFalse();
+        expect(shouldRefreshLiveBoardForManual(true, 300)).toBeFalse();
+    });
+
+    test('refreshes live data older than five minutes', () => {
+        expect(shouldRefreshLiveBoardForManual(true, 301)).toBeTrue();
+        expect(shouldRefreshLiveBoardForManual(true, null)).toBeTrue();
+    });
+
+    test('never refreshes live data for another date', () => {
+        expect(shouldRefreshLiveBoardForManual(false, null)).toBeFalse();
+        expect(shouldRefreshLiveBoardForManual(false, 301)).toBeFalse();
     });
 });
 

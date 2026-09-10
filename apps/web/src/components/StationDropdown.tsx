@@ -17,6 +17,7 @@ import {
 } from './frequentDestinations';
 import {
     filterStationsBySearch,
+    isTaipeiCircularStation,
     normalizeEnglishStationName,
     normalizeSearchValue,
     resolvePreferredStationId,
@@ -162,7 +163,11 @@ export function StationDropdown({
             frequentDestinationIds
                 .slice(0, 3)
                 .map((id) => stationMap.get(id))
-                .filter((station): station is Station => Boolean(station)),
+                .filter(
+                    (station): station is Station =>
+                        station !== undefined &&
+                        !isTaipeiCircularStation(station)
+                ),
         [frequentDestinationIds, stationMap]
     );
 

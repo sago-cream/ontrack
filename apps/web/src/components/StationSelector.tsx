@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowUpDown, Circle, Flag } from 'lucide-react';
+import {
+    ArrowUpDown,
+    Circle,
+    Flag,
+    LoaderCircle,
+    MapPin,
+    MapPinCheck,
+    MapPinOff,
+} from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
 import type { Station } from '../types';
@@ -27,6 +35,12 @@ const MANUAL_ORIGIN_SELECTED_AT_KEY = 'ontrack_manual_origin_selected_at';
 const MANUAL_ORIGIN_PROTECTION_MS = 10 * 60 * 1000;
 type OriginSelectionSource = 'manual' | 'cached' | 'geo' | null;
 type DestinationSelectionSource = 'manual' | 'cached' | 'auto' | null;
+type GeolocationStatus =
+    | 'idle'
+    | 'requesting'
+    | 'denied'
+    | 'timeout'
+    | 'unavailable';
 
 function isManualOriginProtected() {
     const selectedAt = Number(
@@ -52,7 +66,16 @@ export function StationSelector({
     const [destSearch, setDestSearch] = useState('');
     const [originDropdownOpen, setOriginDropdownOpen] = useState(false);
     const [destDropdownOpen, setDestDropdownOpen] = useState(false);
+    const [geolocationGranted, setGeolocationGranted] = useState(false);
+    const [geolocationStatus, setGeolocationStatus] =
+        useState<GeolocationStatus>('idle');
+    const [geolocationPending, setGeolocationPending] = useState(false);
+    const [locatedOriginId, setLocatedOriginId] = useState<string | null>(null);
+    const [geolocationRequestVersion, setGeolocationRequestVersion] =
+        useState(0);
     const hasAutoSelected = useRef(false);
+    const hasCheckedGeolocationPermission = useRef(false);
+    const isExplicitGeolocationRequest = useRef(false);
     const isGeolocationPending = useRef(false);
     const originIdRef = useRef(originId);
     const prevAutoDetectOrigin = useRef(autoDetectOrigin);
@@ -83,6 +106,32 @@ export function StationSelector({
     useEffect(() => {
         originIdRef.current = originId;
     }, [originId]);
+
+    useEffect(() => {
+        if (hasCheckedGeolocationPermission.current || !navigator.permissions) {
+            return;
+        }
+
+        hasCheckedGeolocationPermission.current = true;
+        let cancelled = false;
+
+        navigator.permissions
+            .query({ name: 'geolocation' })
+            .then((result) => {
+                if (cancelled) return;
+
+                const isGranted = result.state === 'granted';
+                setGeolocationGranted(isGranted);
+                if (isGranted) {
+                    setAutoDetectOrigin(true);
+                }
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+        };
+    }, [setAutoDetectOrigin]);
 
     useEffect(() => {
         if (!originId || stations.length === 0) return;
@@ -125,6 +174,9 @@ export function StationSelector({
 
         if (stations.length === 0) return;
 
+        const isExplicitRequest = isExplicitGeolocationRequest.current;
+        isExplicitGeolocationRequest.current = false;
+
         // If auto-detect is disabled, use cached origin if available.
         if (!autoDetectOrigin) {
             hasAutoSelected.current = false;
@@ -134,7 +186,9 @@ export function StationSelector({
                     cachedOriginId &&
                     stations.find((s) => s.id === cachedOriginId)
                 ) {
-                    setOriginId(cachedOriginId);
+                    setOriginId(
+                        resolvePreferredStationId(cachedOriginId, stations)
+                    );
                 }
             }
             return;
@@ -153,33 +207,43 @@ export function StationSelector({
                 cachedOriginId &&
                 stations.find((s) => s.id === cachedOriginId)
             ) {
-                setOriginId(cachedOriginId);
+                setOriginId(
+                    resolvePreferredStationId(cachedOriginId, stations)
+                );
             }
             hasAutoSelected.current = true;
             return;
         }
 
-        const fallbackToCached = () => {
+        const fallbackToCached = (status: GeolocationStatus = 'idle') => {
             isGeolocationPending.current = false;
+            setGeolocationPending(false);
+            setGeolocationStatus(status);
             const cachedOriginId = localStorage.getItem(CACHED_ORIGIN_KEY);
             if (
                 cachedOriginId &&
                 stations.find((s) => s.id === cachedOriginId)
             ) {
-                setOriginWithSource(cachedOriginId, 'cached');
+                setOriginWithSource(
+                    resolvePreferredStationId(cachedOriginId, stations),
+                    'cached'
+                );
             }
             hasAutoSelected.current = true;
         };
 
         const requestGeolocation = () => {
             isGeolocationPending.current = true;
+            setGeolocationPending(true);
+            if (isExplicitRequest) {
+                setGeolocationStatus('requesting');
+            }
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     isGeolocationPending.current = false;
-                    if (isManualOriginProtected()) {
-                        hasAutoSelected.current = true;
-                        return;
-                    }
+                    setGeolocationPending(false);
+                    setGeolocationGranted(true);
+                    setGeolocationStatus('idle');
 
                     const { latitude, longitude } = position.coords;
                     let nearestStation = stations[0];
@@ -204,11 +268,27 @@ export function StationSelector({
                             stations
                         );
 
-                        setOriginWithSource(preferredStationId, 'geo');
+                        setLocatedOriginId(preferredStationId);
+
+                        if (!isManualOriginProtected()) {
+                            setOriginWithSource(preferredStationId, 'geo');
+                        }
                     }
                     hasAutoSelected.current = true;
                 },
-                fallbackToCached,
+                (error) => {
+                    if (error.code === error.PERMISSION_DENIED) {
+                        setGeolocationGranted(false);
+                        setLocatedOriginId(null);
+                    }
+                    fallbackToCached(
+                        isExplicitRequest && error.code === 3
+                            ? 'timeout'
+                            : isExplicitRequest
+                              ? 'denied'
+                              : 'idle'
+                    );
+                },
                 {
                     enableHighAccuracy: false,
                     timeout: 10000,
@@ -219,7 +299,7 @@ export function StationSelector({
 
         // If user explicitly toggled this on, always try requesting geolocation again.
         // This allows retrying permission after a prior rejection.
-        if (isToggledOn) {
+        if (isToggledOn || isExplicitRequest) {
             requestGeolocation();
             return;
         }
@@ -233,26 +313,31 @@ export function StationSelector({
                     if (result.state === 'granted') {
                         // Permission already granted — silently get position
                         requestGeolocation();
-                    } else if (result.state === 'prompt') {
-                        // Never asked yet — ask once, then respect the answer
-                        requestGeolocation();
                     } else {
-                        // Denied — fall back to cache
+                        // Only the visible map-pin action may prompt for access.
                         fallbackToCached();
                     }
                 })
                 .catch(() => {
-                    // Permissions API failed — just request geolocation directly
-                    requestGeolocation();
+                    fallbackToCached();
                 });
         } else {
-            // Permissions API not supported — request directly
-            requestGeolocation();
+            fallbackToCached();
         }
-    }, [autoDetectOrigin, setOriginId, setOriginWithSource, stations]);
+    }, [
+        autoDetectOrigin,
+        geolocationRequestVersion,
+        setOriginId,
+        setOriginWithSource,
+        stations,
+    ]);
 
     const originStation = stations.find((s) => s.id === originId);
     const destStation = stations.find((s) => s.id === destId);
+    const isLocatedOrigin =
+        geolocationGranted &&
+        locatedOriginId !== null &&
+        originId === locatedOriginId;
 
     const handleOriginSelect = (id: string) => {
         setOriginWithSource(id, 'manual');
@@ -267,11 +352,41 @@ export function StationSelector({
         setOriginDropdownOpen(isOpen);
         if (isOpen) {
             setDestDropdownOpen(false);
-            if (!autoDetectOrigin) {
-                setAutoDetectOrigin(true);
-            }
         }
     };
+
+    const handleRequestGeolocation = () => {
+        if (!navigator.geolocation) {
+            setGeolocationStatus('unavailable');
+            return;
+        }
+
+        localStorage.removeItem(MANUAL_ORIGIN_SELECTED_AT_KEY);
+        hasAutoSelected.current = false;
+        isExplicitGeolocationRequest.current = true;
+        setGeolocationStatus('requesting');
+        setAutoDetectOrigin(true);
+        setGeolocationRequestVersion((version) => version + 1);
+    };
+
+    const geolocationStatusMessage =
+        geolocationStatus === 'requesting'
+            ? t('app.locationRequesting')
+            : geolocationStatus === 'denied'
+              ? t('app.locationDenied')
+              : geolocationStatus === 'timeout'
+                ? t('app.locationTimedOut')
+                : geolocationStatus === 'unavailable'
+                  ? t('app.locationUnavailable')
+                  : null;
+
+    const geolocationActionLabel = geolocationPending
+        ? t('app.locationRequesting')
+        : !geolocationGranted
+          ? t('app.enableAutoDetectOrigin')
+          : isLocatedOrigin
+            ? t('app.refreshLocatedOrigin')
+            : t('app.useCurrentLocation');
 
     const handleDestDropdownOpen = (isOpen: boolean) => {
         setDestDropdownOpen(isOpen);
@@ -314,6 +429,33 @@ export function StationSelector({
                             title={t('station.selectOrigin')}
                             selectedStation={originStation}
                             TriggerIcon={Circle}
+                            triggerAction={
+                                <button
+                                    type='button'
+                                    className={`station-action-btn ${isLocatedOrigin ? 'active' : ''}`}
+                                    onClick={handleRequestGeolocation}
+                                    disabled={
+                                        geolocationPending ||
+                                        geolocationStatus === 'unavailable'
+                                    }
+                                    aria-busy={geolocationPending}
+                                    aria-label={geolocationActionLabel}
+                                    title={geolocationActionLabel}
+                                >
+                                    {geolocationPending ? (
+                                        <LoaderCircle
+                                            className='station-location-spinner'
+                                            aria-hidden='true'
+                                        />
+                                    ) : !geolocationGranted ? (
+                                        <MapPinOff aria-hidden='true' />
+                                    ) : isLocatedOrigin ? (
+                                        <MapPinCheck aria-hidden='true' />
+                                    ) : (
+                                        <MapPin aria-hidden='true' />
+                                    )}
+                                </button>
+                            }
                         />
                     </div>
                 </div>
@@ -352,6 +494,18 @@ export function StationSelector({
                     </div>
                 </div>
             </div>
+            {geolocationStatusMessage ? (
+                <div
+                    className={`station-location-status ${
+                        geolocationStatus === 'requesting'
+                            ? 'is-requesting'
+                            : 'is-error'
+                    }`}
+                    role='status'
+                >
+                    {geolocationStatusMessage}
+                </div>
+            ) : null}
         </div>
     );
 }
