@@ -34,7 +34,7 @@ and deployment endpoints.
 
 ## Install
 
-Download OnTrack for iPhone from the
+Download OnTrack for iPhone and iPad from the
 [App Store](https://apps.apple.com/tw/app/ontrack/id6784708806).
 
 Use the web app at [ontrack.hsichen.dev/app](https://ontrack.hsichen.dev/app),
@@ -96,7 +96,7 @@ bun run ios
 Build, open, install, and launch the iOS app in an available simulator:
 
 ```sh
-bun run simulator
+bun run ios:simulator
 ```
 
 To compile the iOS app without opening a simulator, run `bun run ios:build`.

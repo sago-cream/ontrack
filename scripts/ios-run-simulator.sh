@@ -69,7 +69,7 @@ if [[ ! -d "$APP_PATH" ]]; then
     exit 1
 fi
 
-ios_assert_supported_ios_app "$APP_PATH"
+ios_assert_universal_ios_app "$APP_PATH"
 xcrun simctl terminate "$DEVICE_ID" "$IOS_BUNDLE_ID_VALUE" >/dev/null 2>&1 || true
 
 if [[ "$PRESERVE_APP_DATA" != "1" ]]; then

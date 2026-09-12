@@ -89,7 +89,7 @@ bun run ios
 建置 iOS App、開啟可用的模擬器，並安裝及啟動 App：
 
 ```sh
-bun run simulator
+bun run ios:simulator
 ```
 
 若只要編譯 iOS App、不開啟模擬器，請執行 `bun run ios:build`。
