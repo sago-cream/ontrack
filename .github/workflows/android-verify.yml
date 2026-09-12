@@ -87,14 +87,21 @@ jobs:
                   echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
                   sudo udevadm control --reload-rules
                   sudo udevadm trigger --name-match=kvm
+            - uses: actions/cache@v4
+              if: matrix.api == 24
+              with:
+                  path: apps/android/.tools/webview-ci-119
+                  key: aosp-webview-119-f152c1317fee
             - uses: reactivecircus/android-emulator-runner@v2
               with:
                   api-level: ${{ matrix.api }}
                   arch: x86_64
-                  target: google_apis
+                  target: ${{ matrix.api == 24 && 'default' || 'google_apis' }}
                   profile: pixel_2
                   disable-animations: true
-                  script: bun run android:test:device
+                  script: |
+                      if [ '${{ matrix.api }}' = 24 ]; then bash scripts/android-prepare-ci-webview.sh; fi
+                      timeout 15m bun run android:test:device
             - uses: actions/upload-artifact@v4
               if: always()
               with:

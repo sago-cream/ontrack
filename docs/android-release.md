@@ -3,6 +3,8 @@
 OnTrack uses Capacitor 8 to bundle the web app with native widgets, sharing,
 launcher icons, Play Billing, and update checks. The package is
 `dev.hsichen.ontrack`, minimum Android 7 (API 24), target Android 16 (API 36).
+The bundled Next.js app requires Android System WebView/Chrome 111 or newer.
+Keep the system WebView updated through Google Play on physical devices.
 
 ## Current progress
 
@@ -34,12 +36,15 @@ The release additions follow the ColorInvo “ci andriod” task:
   the key was deleted. It is not a production upload key or a distributable build.
 - Upload/listing and exact-version promotion Gradle task graphs passed `--dry-run`;
   no Play API call, credential installation, website deployment, or publishing
-  occurred. Actions YAML passed actionlint. API 24/36 jobs are configured but have
-  not yet run on GitHub.
+  occurred. Actions YAML passed actionlint. Current GitHub verification is tracked
+  in [PR #54](https://github.com/sago-cream/ontrack/pull/54).
 - The production preflight still fails: `/api/stations` returns HTTP 403 to the
   Android origin, and the public privacy page does not yet include Google Play.
-- Remote `main` remains `5244146`; the original Android port and this follow-up
-  branch have not been pushed. Push/merge is needed to activate the workflows.
+- CI uses an AOSP API 24 emulator with checksum-pinned WebView 119 because its
+  factory browser is too old for Next.js. The replacement comes from the official
+  AOSP repository and uses AOSP's public emulator test certificate. API 36 uses
+  the stock Google APIs image. UI tests require WebView 111+ and have bounded
+  timeouts; these CI prerequisites do not change release signing credentials.
 
 ## Local preparation
 

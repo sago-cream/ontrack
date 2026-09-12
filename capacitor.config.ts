@@ -8,6 +8,7 @@ const config: CapacitorConfig = {
     android: {
         path: 'apps/android',
         backgroundColor: '#ffffff',
+        minWebViewVersion: 111,
     },
     server: {
         appStartPath: '/app.html',

@@ -71,8 +71,14 @@ public class ParityTest {
     }
   }
 
-  @Test
+  @Test(timeout = 120000)
   public void mainSettingsTimeSearchAndThemes() throws Exception {
+    android.content.pm.PackageInfo webview =
+        androidx.webkit.WebViewCompat.getCurrentWebViewPackage(context);
+    assertNotNull("A WebView provider must be installed", webview);
+    assertTrue(
+        "Update Android System WebView to version 111 or newer before running UI tests",
+        Integer.parseInt(webview.versionName.split("\\.")[0]) >= 111);
     String locale = InstrumentationRegistry.getArguments().getString("ontrackLocale");
     if (locale != null && android.os.Build.VERSION.SDK_INT >= 33) {
       context
@@ -101,7 +107,8 @@ public class ParityTest {
       js(scenario, "document.querySelectorAll('.train-card')[1].click()");
       ready(
           scenario,
-          "document.querySelectorAll('.train-card')[1].getAttribute('aria-pressed') === 'true'");
+          "document.querySelectorAll('.train-card')[1].getAttribute('aria-pressed') ==="
+              + " 'true'");
       js(scenario, "document.querySelector('.app-toolbar-button:last-child').click()");
       ready(scenario, "document.querySelector('.settings-sheet') !== null");
       assertEquals(
@@ -125,20 +132,20 @@ public class ParityTest {
           "true",
           js(
               scenario,
-              "document.querySelectorAll('.train-card')[1].getAttribute('aria-pressed') ==="
-                  + " 'true'"));
+              "document.querySelectorAll('.train-card')[1].getAttribute('aria-pressed')"
+                  + " === 'true'"));
       js(scenario, "document.querySelector('.app-toolbar-button:last-child').click()");
       ready(scenario, "document.querySelector('.settings-header') !== null");
       js(
           scenario,
-          "(() => { const target = document.querySelector('.settings-header'); const start = new"
-              + " Touch({identifier:1,target,clientY:100}); const end = new"
+          "(() => { const target = document.querySelector('.settings-header'); const"
+              + " start = new Touch({identifier:1,target,clientY:100}); const end = new"
               + " Touch({identifier:1,target,clientY:220}); target.dispatchEvent(new"
               + " TouchEvent('touchstart',{bubbles:true,touches:[start]}));"
               + " target.dispatchEvent(new"
               + " TouchEvent('touchmove',{bubbles:true,cancelable:true,touches:[end]}));"
-              + " target.dispatchEvent(new TouchEvent('touchend',{bubbles:true,touches:[]}));"
-              + " })()");
+              + " target.dispatchEvent(new"
+              + " TouchEvent('touchend',{bubbles:true,touches:[]})); })()");
       ready(scenario, "document.querySelector('.settings-sheet') === null");
       js(scenario, "document.querySelector('.time-selector-trigger').click()");
       ready(scenario, "document.querySelector('.time-editor-sheet') !== null");
@@ -158,7 +165,7 @@ public class ParityTest {
     }
   }
 
-  @Test
+  @Test(timeout = 120000)
   public void playStoreScreenshots() throws Exception {
     org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= 33);
     String locale = InstrumentationRegistry.getArguments().getString("ontrackLocale", "en-US");
