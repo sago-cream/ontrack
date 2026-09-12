@@ -99,6 +99,8 @@ jobs:
                   target: ${{ matrix.api == 24 && 'default' || 'google_apis' }}
                   profile: pixel_2
                   disable-animations: true
+                  # Avoid the deprecated indirect renderer and Vulkan instability on CI hosts.
+                  emulator-options: -no-window -gpu swiftshader -feature -Vulkan -no-snapshot -noaudio -no-boot-anim -no-metrics
                   script: |
                       if [ '${{ matrix.api }}' = 24 ]; then bash scripts/android-prepare-ci-webview.sh; fi
                       timeout 15m bun run android:test:device
