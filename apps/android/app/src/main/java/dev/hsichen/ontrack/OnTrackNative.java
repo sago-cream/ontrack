@@ -159,10 +159,16 @@ public class OnTrackNative extends Plugin {
 
   @PluginMethod
   public void locale(PluginCall call) {
-    JSObject result = new JSObject();
-    result.put(
-        "language", getContext().getResources().getConfiguration().getLocales().toLanguageTags());
-    call.resolve(result);
+    // Reply after the WebView message listener has installed the current document's reply proxy.
+    getActivity()
+        .runOnUiThread(
+            () -> {
+              JSObject result = new JSObject();
+              result.put(
+                  "language",
+                  getContext().getResources().getConfiguration().getLocales().toLanguageTags());
+              call.resolve(result);
+            });
   }
 
   @PluginMethod
