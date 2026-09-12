@@ -128,12 +128,12 @@ export const translations = {
         'support.faq.bug.title': '我發現錯誤或想提出功能建議。',
         'support.faq.bug.include': '請盡量附上：',
         'support.faq.bug.device': '裝置型號',
-        'support.faq.bug.ios': 'iOS 版本',
+        'support.faq.bug.ios': 'iOS 或 Android 版本',
         'support.faq.bug.version': 'OnTrack 版本',
         'support.faq.bug.screenshots': '相關截圖',
         'support.faq.bug.steps': '重現步驟',
         'privacy.title': '隱私權政策',
-        'privacy.meta': '更新日期：2026 年 6 月',
+        'privacy.meta': '更新日期：2026 年 9 月',
         'privacy.subtitle':
             'OnTrack 不需要帳號、不會出售使用者資料，定位車站偵測會保留在您的裝置上。',
         'privacy.footerNote': 'OnTrack 隱私權資訊。',
@@ -156,6 +156,9 @@ export const translations = {
         'privacy.collect.location.title': '定位',
         'privacy.collect.location.body':
             '若您授權定位，OnTrack 會在您的裝置或瀏覽器中使用目前位置來選擇最近的出發車站。',
+        'privacy.android.title': 'Android 與 Google Play',
+        'privacy.android.body':
+            'Android 定位為選用功能，只在 App 使用期間取得位置，不要求背景定位權限。偏好設定、分享文字、已驗證的支持者購買狀態及小工具路線快取保存在本機；Android 雲端備份已停用。小工具可在背景以已儲存的車站與日期查詢時刻，不會取得背景位置。Google Play 處理支持者購買、付款與更新；App 在裝置上驗證購買簽章並向 Google 確認購買，不會收到付款卡片資料，也不會將購買憑證傳送至 OnTrack 伺服器。Android 版本未內嵌廣告或分析 SDK。清除 App 資料或解除安裝可移除本機資料；Google 的交易紀錄依其政策保留。',
         'privacy.collect.location.detect': '偵測附近車站',
         'privacy.collect.location.fill': '更快速填入出發站',
         'privacy.collect.location.fallback': '必要時使用已快取的出發站',
@@ -173,7 +176,7 @@ export const translations = {
             '本機偏好紀錄不會作為獨立個人檔案上傳。只有當您使用某個目的地進行時刻查詢時，它才會成為伺服器請求的一部分。',
         'privacy.collect.analytics.title': '分析與診斷',
         'privacy.collect.analytics.body':
-            '正式網站可能使用 Cloudflare Web Analytics 與主機遙測來了解基本網站可靠性與效能。Apple、Cloudflare 與其他平台服務提供者可能會依其政策處理診斷資料、當機報告或請求中繼資料。',
+            '正式網站可能使用 Cloudflare Web Analytics 與主機遙測來了解基本網站可靠性與效能。Apple、Google、Cloudflare 與其他平台服務提供者可能會依其政策處理診斷資料、當機報告或請求中繼資料。',
         'privacy.collect.personal.title': '個人資訊',
         'privacy.collect.personal.body':
             'OnTrack 不需要帳號，也不會收集您的姓名、電話號碼、通訊地址等可識別個人的資訊。',
@@ -193,7 +196,8 @@ export const translations = {
         'privacy.retention.body':
             '本機偏好設定會保留在您的裝置上，直到您清除網站資料、重設 App 資料或解除安裝 App。OnTrack 伺服器的路線需求彙總資料會在對快取預熱與更新最佳化仍有用時保留。由平台或主機提供者處理的診斷資料、當機報告、請求中繼資料與分析資料，會依各提供者政策保留。',
         'privacy.rights.title': '您的權利',
-        'privacy.rights.disableLocation': '您可以在 iOS 設定中關閉定位權限。',
+        'privacy.rights.disableLocation':
+            '您可以在 iOS、Android 或瀏覽器設定中關閉定位權限，並手動選擇車站。',
         'privacy.rights.contact':
             '若有隱私相關問題，您可以透過 {email} 聯絡我們。',
         'privacy.contact.title': '聯絡方式',
@@ -381,12 +385,12 @@ export const translations = {
         'support.faq.bug.title': 'I found a bug or have a feature request.',
         'support.faq.bug.include': 'Please include these details if available:',
         'support.faq.bug.device': 'Device model',
-        'support.faq.bug.ios': 'iOS version',
+        'support.faq.bug.ios': 'iOS or Android version',
         'support.faq.bug.version': 'OnTrack version',
         'support.faq.bug.screenshots': 'Screenshots, if applicable',
         'support.faq.bug.steps': 'Steps to reproduce',
         'privacy.title': 'Privacy Policy',
-        'privacy.meta': 'Last updated: June 2026',
+        'privacy.meta': 'Last updated: September 2026',
         'privacy.subtitle':
             'OnTrack does not require an account, does not sell user data, and keeps location-based station detection on your device.',
         'privacy.footerNote': 'Privacy information for OnTrack.',
@@ -410,6 +414,9 @@ export const translations = {
         'privacy.collect.location.title': 'Location',
         'privacy.collect.location.body':
             'If you grant permission, OnTrack uses your current location on your device or in your browser to choose the nearest departure station.',
+        'privacy.android.title': 'Android and Google Play',
+        'privacy.android.body':
+            'Android location access is optional and used only while the app is in use; no background location permission is requested. Preferences, share text, verified supporter ownership, and widget route caches stay on the device. Android cloud backup is disabled. Widgets can request schedules in the background using saved station IDs and dates, without accessing background location. Google Play handles supporter purchases, payments, and updates. The app verifies purchase signatures on the device and acknowledges purchases with Google; it receives no payment card details and sends no purchase receipts to the OnTrack server. The Android app embeds no advertising or analytics SDK. Clearing app data or uninstalling removes local data; Google retains transaction records under its own policies.',
         'privacy.collect.location.detect': 'Detect nearby stations',
         'privacy.collect.location.fill': 'Fill the origin station more quickly',
         'privacy.collect.location.fallback':
@@ -429,7 +436,7 @@ export const translations = {
             'This local preference history is not uploaded as a separate profile. A destination becomes part of a server request only when you use it in a schedule lookup.',
         'privacy.collect.analytics.title': 'Analytics and Diagnostics',
         'privacy.collect.analytics.body':
-            'The production website may use Cloudflare Web Analytics and hosting telemetry to understand basic site reliability and performance. Apple, Cloudflare, and other platform providers may process diagnostics, crash reports, or request metadata according to their own policies.',
+            'The production website may use Cloudflare Web Analytics and hosting telemetry to understand basic site reliability and performance. Apple, Google, Cloudflare, and other platform providers may process diagnostics, crash reports, or request metadata according to their own policies.',
         'privacy.collect.personal.title': 'Personal Information',
         'privacy.collect.personal.body':
             'OnTrack does not require an account and does not collect personally identifiable information such as your name, phone number, or mailing address.',
@@ -451,7 +458,7 @@ export const translations = {
             "Local preferences stay on your device until you clear site data, reset app data, or uninstall the app. OnTrack server route-demand aggregates are kept while they are useful for cache prewarming and refresh optimization. Diagnostics, crash reports, request metadata, and analytics handled by platform or hosting providers are retained according to those providers' policies.",
         'privacy.rights.title': 'Your Rights',
         'privacy.rights.disableLocation':
-            'You may disable Location permission in iOS Settings.',
+            'You may disable Location permission in iOS or Android settings, or in your browser, and select stations manually.',
         'privacy.rights.contact':
             'You may contact us with privacy-related questions at {email}.',
         'privacy.contact.title': 'Contact',

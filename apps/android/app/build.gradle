@@ -65,6 +65,7 @@ android {
 
 play {
     defaultToAppBundles.set(true)
+    commit.set((environment['PLAY_VALIDATE_ONLY'] ?: 'true') == 'false')
     track.set(environment['PLAY_TRACK'] ?: 'internal')
     releaseStatus.set(ReleaseStatus.valueOf((environment['PLAY_RELEASE_STATUS'] ?: 'draft').toUpperCase()))
 }

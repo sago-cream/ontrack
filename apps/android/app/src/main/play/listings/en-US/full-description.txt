@@ -10,6 +10,10 @@ Features:
 • Quick sharing of destination and arrival details
 • Traditional Chinese and English
 • Light, dark, and system appearance modes
+• Next Train and Compare Trains home-screen widgets
+• Custom share messages and electronic fare card filtering
+
+An optional one-time supporter purchase unlocks additional themes and launcher icons. Schedule lookup and widgets are available without a purchase.
 
 No account is required. OnTrack does not sell personal data, and raw location coordinates are not stored in the OnTrack application database.
 

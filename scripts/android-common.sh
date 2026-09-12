@@ -92,5 +92,35 @@ android_require_command() {
     command -v "$1" >/dev/null 2>&1 || android_die "Missing required command: $1"
 }
 
+android_resolve_release_versions() {
+    ANDROID_VERSION_NAME="${ANDROID_VERSION_NAME:-0.2.0}"
+    ANDROID_VERSION_CODE="${ANDROID_VERSION_CODE:-1}"
+    [[ "$ANDROID_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] && ((10#$ANDROID_VERSION_CODE <= 2100000000)) \
+        || android_die "ANDROID_VERSION_CODE must be an integer from 1 to 2100000000."
+    [[ "$ANDROID_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
+        || android_die "ANDROID_VERSION_NAME must be a semantic version such as 0.2.0."
+    export ANDROID_VERSION_NAME ANDROID_VERSION_CODE
+}
+
+android_play_config() {
+    android_resolve_release_versions
+    PLAY_TRACK="${PLAY_TRACK:-internal}"
+    PLAY_RELEASE_STATUS="${PLAY_RELEASE_STATUS:-draft}"
+    PLAY_VALIDATE_ONLY="${PLAY_VALIDATE_ONLY:-true}"
+    case "$PLAY_TRACK" in internal|alpha|beta|production) ;; *) android_die "Invalid PLAY_TRACK." ;; esac
+    case "$PLAY_RELEASE_STATUS" in draft|completed) ;; *) android_die "PLAY_RELEASE_STATUS must be draft or completed." ;; esac
+    case "$PLAY_VALIDATE_ONLY" in true|false) ;; *) android_die "PLAY_VALIDATE_ONLY must be true or false." ;; esac
+    python3 "$ANDROID_ROOT_DIR/scripts/android-play-credentials.py"
+    if [[ -z "${ANDROID_PUBLISHER_CREDENTIALS:-}" ]]; then
+        ANDROID_PUBLISHER_CREDENTIALS="$(<"$PLAY_SERVICE_ACCOUNT_JSON")"
+    fi
+    export PLAY_TRACK PLAY_RELEASE_STATUS PLAY_VALIDATE_ONLY ANDROID_PUBLISHER_CREDENTIALS
+}
+
+android_clear_play_edit() {
+    # GPP retains uncommitted edit IDs between runs. Never reuse a rehearsal edit.
+    rm -f "$ANDROID_PROJECT_DIR/app/build/gpp/dev.hsichen.ontrack.txt"*
+}
+
 android_load_env
 ANDROID_API_ORIGIN_VALUE="${ANDROID_API_ORIGIN:-https://ontrack.hsichen.dev}"

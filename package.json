@@ -39,7 +39,14 @@
         "security:scan": "gitleaks detect --source . --redact --no-banner",
         "test": "bun test apps/worker/tests && bash scripts/worker-deploy-prod.test.sh",
         "format": "prettier --write .",
-        "prepare": "husky"
+        "prepare": "husky",
+        "android:candidate": "scripts/android-candidate.sh",
+        "android:upload": "scripts/android-upload.sh",
+        "android:promote": "scripts/android-promote.sh",
+        "android:store:check": "python3 scripts/android-store-check.py",
+        "android:verify:bundle": "scripts/android-verify-bundle.sh",
+        "android:policy:check": "python3 scripts/android-policy-check.py",
+        "android:test:release": "bash scripts/android-release.test.sh"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx}": [

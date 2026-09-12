@@ -25,3 +25,13 @@ for version in 17 21 24 25; do
 done
 
 echo 'Android environment tests passed.'
+
+for version_code in 1 2100000000 0 2100000001 999999999999999999999999999 01 '1;echo invalid'; do
+    if ANDROID_VERSION_CODE="$version_code" ANDROID_VERSION_NAME=0.2.0 \
+        ANDROID_ENV_FILE="$test_dir/missing.env" bash -c 'source "$1/scripts/android-common.sh"; android_resolve_release_versions' _ "$root_dir" >/dev/null 2>&1; then
+        [[ "$version_code" == 1 || "$version_code" == 2100000000 ]]
+    else
+        [[ "$version_code" != 1 && "$version_code" != 2100000000 ]]
+    fi
+done
+echo 'Android release version checks passed.'

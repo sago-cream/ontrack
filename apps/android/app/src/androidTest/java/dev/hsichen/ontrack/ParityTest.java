@@ -64,6 +64,7 @@ public class ParityTest {
     Bitmap screenshot =
         InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
     assertNotNull(screenshot);
+    screenshot.setHasAlpha(false);
     File file = new File(outputDirectory(), name + ".png");
     try (FileOutputStream output = new FileOutputStream(file)) {
       screenshot.compress(Bitmap.CompressFormat.PNG, 100, output);
@@ -90,7 +91,12 @@ public class ParityTest {
           "\"76px\"",
           js(scenario, "getComputedStyle(document.querySelector('.train-card')).height"));
       assertEquals("true", js(scenario, "document.documentElement.scrollWidth <= innerWidth"));
-      if (locale != null) ready(scenario, "document.documentElement.lang === '" + locale + "'");
+      if (locale != null)
+        ready(
+            scenario,
+            "document.documentElement.lang === '"
+                + (locale.startsWith("en") ? "en" : "zh-TW")
+                + "'");
       capture("android-main");
       js(scenario, "document.querySelectorAll('.train-card')[1].click()");
       ready(
@@ -149,6 +155,43 @@ public class ParityTest {
       js(scenario, "window.dispatchEvent(new Event('ontrack-back', {cancelable:true}))");
       ready(scenario, "document.querySelector('.station-search-overlay') === null");
       capture("android-main-final");
+    }
+  }
+
+  @Test
+  public void playStoreScreenshots() throws Exception {
+    org.junit.Assume.assumeTrue(android.os.Build.VERSION.SDK_INT >= 33);
+    String locale = InstrumentationRegistry.getArguments().getString("ontrackLocale", "en-US");
+    context
+        .getSystemService(android.app.LocaleManager.class)
+        .setApplicationLocales(android.os.LocaleList.forLanguageTags(locale));
+    context
+        .getSharedPreferences("ontrack_native", 0)
+        .edit()
+        .putBoolean("supporter", false)
+        .commit();
+    Intent intent = new Intent(context, MainActivity.class).putExtra("ontrackShowcase", true);
+    try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(intent)) {
+      ready(scenario, "document.querySelector('.train-card.selected') !== null");
+      js(scenario, "localStorage.clear(); location.reload()");
+      ready(scenario, "document.querySelector('.train-card.selected') !== null");
+      ready(
+          scenario,
+          "document.documentElement.lang === '" + (locale.startsWith("en") ? "en" : "zh-TW") + "'");
+      capture("1-main");
+      js(scenario, "document.querySelector('.app-toolbar-button:last-child').click()");
+      ready(scenario, "document.querySelector('.settings-sheet') !== null");
+      capture("2-settings");
+      js(scenario, "document.querySelector('.settings-navigation-button').click()");
+      ready(scenario, "document.querySelector('.message-template-input') !== null");
+      capture("3-message");
+      js(scenario, "window.dispatchEvent(new Event('ontrack-back', {cancelable:true}))");
+      ready(scenario, "document.querySelector('.theme-picker') !== null");
+      js(scenario, "window.dispatchEvent(new Event('ontrack-back', {cancelable:true}))");
+      ready(scenario, "document.querySelector('.settings-sheet') === null");
+      js(scenario, "document.querySelector('.time-selector-trigger').click()");
+      ready(scenario, "document.querySelector('.time-editor-sheet') !== null");
+      capture("4-time");
     }
   }
 

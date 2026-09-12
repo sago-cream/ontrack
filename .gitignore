@@ -38,6 +38,8 @@ apps/ios/OnTrack/OnTrack.local.storekit
 next-env.d.ts
 apps/worker/wrangler.production.jsonc
 play-service-account.json
+apps/android/.tools/
+__pycache__/
 
 # Environment variables
 .env
