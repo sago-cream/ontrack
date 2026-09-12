@@ -3006,6 +3006,8 @@ private struct MessageTemplateTextEditor: UIViewRepresentable {
 
     func updateUIView(_ textView: UITextView, context: Context) {
         context.coordinator.parent = self
+        // UIKit owns the text and selection until the IME commits marked text.
+        guard textView.markedTextRange == nil else { return }
         context.coordinator.isUpdating = true
 
         if Self.template(from: textView.attributedText) != text {
@@ -3110,7 +3112,8 @@ private struct MessageTemplateTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChange(_ textView: UITextView) {
-            guard !isUpdating else { return }
+            guard !isUpdating, textView.markedTextRange == nil else { return }
+            parent.selectedRange = textView.selectedRange
             parent.text = MessageTemplateTextEditor.template(
                 from: textView.attributedText
             )
@@ -3118,7 +3121,7 @@ private struct MessageTemplateTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
-            guard !isUpdating else { return }
+            guard !isUpdating, textView.markedTextRange == nil else { return }
             parent.selectedRange = textView.selectedRange
             textView.typingAttributes = parent.baseAttributes
         }

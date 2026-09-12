@@ -634,10 +634,13 @@ const InlineMessageEditor = forwardRef<
     forwardedRef
 ) {
     const editorRef = useRef<HTMLDivElement>(null);
+    const isComposingRef = useRef(false);
 
     const emitChange = () => {
         const editor = editorRef.current;
-        if (editor) onChange(serializeInlineEditor(editor));
+        if (editor && !isComposingRef.current) {
+            onChange(serializeInlineEditor(editor));
+        }
     };
 
     const insertTextAtSelection = (text: string) => {
@@ -700,7 +703,12 @@ const InlineMessageEditor = forwardRef<
 
     useLayoutEffect(() => {
         const editor = editorRef.current;
-        if (!editor || serializeInlineEditor(editor) === template) return;
+        if (
+            !editor ||
+            isComposingRef.current ||
+            serializeInlineEditor(editor) === template
+        )
+            return;
 
         const fragment = document.createDocumentFragment();
         for (const segment of parseShareMessageTemplate(template)) {
@@ -717,6 +725,14 @@ const InlineMessageEditor = forwardRef<
     }, [template, tokenLabels]);
 
     const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        // Safari can report composition as ended on the confirmation keydown.
+        if (
+            isComposingRef.current ||
+            event.nativeEvent.isComposing ||
+            event.keyCode === 229
+        )
+            return;
+
         if (event.key === 'Enter') {
             event.preventDefault();
             insertTextAtSelection('\n');
@@ -739,6 +755,13 @@ const InlineMessageEditor = forwardRef<
             aria-multiline='true'
             data-placeholder={placeholder}
             spellCheck
+            onCompositionStart={() => {
+                isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+                isComposingRef.current = false;
+                emitChange();
+            }}
             onInput={emitChange}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
