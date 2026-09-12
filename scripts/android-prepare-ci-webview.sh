@@ -48,7 +48,11 @@ PY
     --key "$CACHE/testkey.pk8" --cert "$CACHE/testkey.x509.pem" \
     --out "$CACHE/webview-emulator.apk" "$CACHE/webview.apk"
 adb install -r "$CACHE/webview-emulator.apk"
-adb shell cmd webviewupdate set-webview-implementation com.android.webview
-adb shell dumpsys webviewupdate | tee "$CACHE/provider.txt"
-grep -q 'Current WebView package.*119.0.6045.141' "$CACHE/provider.txt" \
-    || android_die "WebView 119 was not activated."
+PROVIDER_RESULT="$(adb shell cmd webviewupdate set-webview-implementation com.android.webview | tr -d '\r')"
+[[ "$PROVIDER_RESULT" == Success ]] || android_die "WebView activation failed: $PROVIDER_RESULT"
+# API 24 has no dumpsys webviewupdate output. Its switch command returns Success
+# only when the requested provider is active; inspect PackageManager for version.
+adb shell dumpsys package com.android.webview > "$CACHE/package.txt"
+grep -q 'versionName=119.0.6045.141' "$CACHE/package.txt" \
+    || android_die "Unexpected installed WebView version."
+echo "CI WebView active: com.android.webview 119.0.6045.141"
