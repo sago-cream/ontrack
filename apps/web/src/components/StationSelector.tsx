@@ -7,16 +7,27 @@ import {
     MapPin,
     MapPinCheck,
     MapPinOff,
+    Navigation,
+    NavigationOff,
 } from 'lucide-react';
 
 import { useI18n } from '../i18n/useI18n';
+import {
+    isAndroid,
+    NativeApp,
+    selectionFeedback,
+    usesNativeUI,
+} from '../native/platform';
 import type { Station } from '../types';
 import {
     getAutoFillDestinationId,
     persistFrequentDestinationId,
 } from './frequentDestinations';
 import { StationDropdown } from './StationDropdown';
-import { resolvePreferredStationId } from './stationSearchUtils';
+import {
+    isTaipeiCircularStation,
+    resolvePreferredStationId,
+} from './stationSearchUtils';
 
 import './StationSelector.css';
 
@@ -70,6 +81,7 @@ export function StationSelector({
     const [geolocationStatus, setGeolocationStatus] =
         useState<GeolocationStatus>('idle');
     const [geolocationPending, setGeolocationPending] = useState(false);
+    const [nearbyStations, setNearbyStations] = useState<Station[]>([]);
     const [locatedOriginId, setLocatedOriginId] = useState<string | null>(null);
     const [geolocationRequestVersion, setGeolocationRequestVersion] =
         useState(0);
@@ -102,6 +114,28 @@ export function StationSelector({
         },
         [setOriginId]
     );
+
+    useEffect(() => {
+        if (!isAndroid() || !autoDetectOrigin) return;
+        const refreshLocation = () => {
+            if (
+                document.visibilityState !== 'visible' ||
+                isGeolocationPending.current ||
+                isManualOriginProtected()
+            )
+                return;
+            hasAutoSelected.current = false;
+            setGeolocationRequestVersion((version) => version + 1);
+        };
+        const interval = window.setInterval(refreshLocation, 120_000);
+        document.addEventListener('visibilitychange', refreshLocation);
+        window.addEventListener('focus', refreshLocation);
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', refreshLocation);
+            window.removeEventListener('focus', refreshLocation);
+        };
+    }, [autoDetectOrigin]);
 
     useEffect(() => {
         originIdRef.current = originId;
@@ -246,6 +280,27 @@ export function StationSelector({
                     setGeolocationStatus('idle');
 
                     const { latitude, longitude } = position.coords;
+                    setNearbyStations(
+                        stations
+                            .filter(
+                                (s) =>
+                                    s.lat != null &&
+                                    s.lon != null &&
+                                    !isTaipeiCircularStation(s)
+                            )
+                            .sort(
+                                (a, b) =>
+                                    Math.hypot(
+                                        a.lat! - latitude,
+                                        a.lon! - longitude
+                                    ) -
+                                    Math.hypot(
+                                        b.lat! - latitude,
+                                        b.lon! - longitude
+                                    )
+                            )
+                            .slice(0, 3)
+                    );
                     let nearestStation = stations[0];
                     let minDistance = Number.MAX_VALUE;
 
@@ -356,6 +411,10 @@ export function StationSelector({
     };
 
     const handleRequestGeolocation = () => {
+        if (isAndroid() && geolocationStatus === 'denied') {
+            void NativeApp.openLocationSettings();
+            return;
+        }
         if (!navigator.geolocation) {
             setGeolocationStatus('unavailable');
             return;
@@ -399,6 +458,7 @@ export function StationSelector({
         if (!originId || !destId) return;
 
         const currentOriginId = originId;
+        selectionFeedback();
         const currentDestinationId = destId;
 
         setOriginWithSource(currentDestinationId, 'manual');
@@ -418,6 +478,7 @@ export function StationSelector({
                 <div className='station-row station-row-origin'>
                     <div className='station-field'>
                         <StationDropdown
+                            recommendations={nearbyStations}
                             stations={stations}
                             searchValue={originSearch}
                             setSearchValue={setOriginSearch}
@@ -447,6 +508,19 @@ export function StationSelector({
                                             className='station-location-spinner'
                                             aria-hidden='true'
                                         />
+                                    ) : usesNativeUI() ? (
+                                        !geolocationGranted ? (
+                                            <NavigationOff aria-hidden='true' />
+                                        ) : (
+                                            <Navigation
+                                                aria-hidden='true'
+                                                fill={
+                                                    isLocatedOrigin
+                                                        ? 'currentColor'
+                                                        : 'none'
+                                                }
+                                            />
+                                        )
                                     ) : !geolocationGranted ? (
                                         <MapPinOff aria-hidden='true' />
                                     ) : isLocatedOrigin ? (

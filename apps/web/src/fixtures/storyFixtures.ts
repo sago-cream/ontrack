@@ -72,3 +72,42 @@ export const storySchedule: ScheduleResponse = {
     destination: storyStations[2],
     trains: storyTrains,
 };
+
+// Matches iOS APIClient.showcaseTrains for cross-platform screenshot comparisons.
+export const nativeStoryStations: Station[] = [
+    storyStations[0],
+    storyStations[1],
+    {
+        id: '1210',
+        name: '新竹',
+        nameEn: 'Hsinchu',
+        lat: 24.8017,
+        lon: 120.9717,
+    },
+    storyStations[2],
+];
+export const nativeStorySchedule: ScheduleResponse = {
+    ...storySchedule,
+    origin: nativeStoryStations[0],
+    destination: nativeStoryStations[2],
+    trains: [
+        ['124', '區間快', '09:20', '10:38', 2, 322, 0],
+        ['125', '區間', '09:38', '10:54', 1, 322, 4],
+        ['126', '自強', '09:54', '11:10', 1, 500, 0],
+        ['127', '區間', '10:08', '11:26', 1, 322, 0],
+        ['128', '自強', '10:22', '11:38', 1, 500, 0],
+        ['129', '區間', '10:38', '11:56', 2, 322, 0],
+    ].map((row) => ({
+        trainNo: String(row[0]),
+        trainType: String(row[1]),
+        departureTime: String(row[2]),
+        arrivalTime: String(row[3]),
+        tripLine: Number(row[4]),
+        price: Number(row[5]),
+        delay: Number(row[6]),
+        direction: 0,
+        originStation: '1000',
+        destinationStation: '1210',
+        status: row[6] ? 'delayed' : 'on-time',
+    })),
+};

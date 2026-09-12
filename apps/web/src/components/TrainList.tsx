@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, getUserSafeErrorMessage } from '../api/client';
 import { useI18n } from '../i18n/useI18n';
+import {
+    isAndroid,
+    NativeApp,
+    selectionFeedback,
+    type AppearanceMode,
+} from '../native/platform';
 import { supportsElectronicTicket } from '../trainEligibility';
 import type { TrainInfo } from '../types';
 import type { TimeMode } from './TimeSelector';
@@ -163,6 +169,10 @@ export function buildDisplayState(
 }
 
 interface TrainListProps {
+    widgetMessageTemplate?: string;
+    widgetAppearance?: AppearanceMode;
+    widgetOrigin?: string;
+    widgetDestination?: string;
     originId: string;
     destId: string;
     date: string;
@@ -177,6 +187,10 @@ interface TrainListProps {
 }
 
 export function TrainList({
+    widgetMessageTemplate = '',
+    widgetAppearance = 'light',
+    widgetOrigin = '',
+    widgetDestination = '',
     originId,
     destId,
     date,
@@ -197,6 +211,10 @@ export function TrainList({
     const lastFetchTimeRef = useRef<number | null>(null);
     const lastFetchParamsRef = useRef<string>('');
     const requestIdRef = useRef(0);
+    const selectionRef = useRef({ onSelect, selectedTrainNo });
+    useEffect(() => {
+        selectionRef.current = { onSelect, selectedTrainNo };
+    }, [onSelect, selectedTrainNo]);
     const lastRefreshLiveNonceRef = useRef(refreshLiveNonce);
     const warmingRetryTimerRef = useRef<number | null>(null);
 
@@ -323,10 +341,45 @@ export function TrainList({
     );
 
     useEffect(() => {
-        if (recommendedTrain) {
-            onSelect(recommendedTrain);
-        }
-    }, [recommendedTrain, onSelect]);
+        const selected =
+            displayTrains.find(
+                (train) =>
+                    train.trainNo === selectionRef.current.selectedTrainNo
+            ) ?? recommendedTrain;
+        if (selected) selectionRef.current.onSelect(selected);
+    }, [displayTrains, recommendedTrain]);
+
+    useEffect(() => {
+        if (!isAndroid() || loading || error) return;
+        void NativeApp.saveWidget({
+            snapshot: JSON.stringify({
+                originId,
+                destinationId: destId,
+                origin: widgetOrigin,
+                destination: widgetDestination,
+                date,
+                appearance: widgetAppearance,
+                messageTemplate: widgetMessageTemplate,
+                electronicTicketOnly,
+                language,
+                trains: allTrains,
+                fetchedAt: Date.now(),
+            }),
+        }).catch(() => {});
+    }, [
+        originId,
+        destId,
+        widgetOrigin,
+        widgetDestination,
+        date,
+        widgetAppearance,
+        widgetMessageTemplate,
+        electronicTicketOnly,
+        language,
+        allTrains,
+        loading,
+        error,
+    ]);
 
     if (!originId || !destId) return null;
 
@@ -405,7 +458,10 @@ export function TrainList({
                                 key={trainData.trainNo}
                                 type='button'
                                 className={`card-panel clickable-item train-card ${isSelected ? 'selected' : ''}`}
-                                onClick={() => onSelect(trainData)}
+                                onClick={() => {
+                                    selectionFeedback();
+                                    onSelect(trainData);
+                                }}
                                 aria-pressed={isSelected}
                                 aria-label={trainLabel}
                             >

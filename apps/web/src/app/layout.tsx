@@ -85,19 +85,19 @@ const APPEARANCE_BOOTSTRAP_SCRIPT = `
         var legacyDarkModeKey = 'ontrack_dark_mode';
         var mode = window.localStorage.getItem(appearanceKey);
 
-        if (mode !== 'system' && mode !== 'light' && mode !== 'dark') {
+        if (!['system','light','dark','sage','amethyst','ember'].includes(mode)) {
             var legacyDarkMode = window.localStorage.getItem(legacyDarkModeKey);
             mode = legacyDarkMode === null ? 'light' : legacyDarkMode === 'true' ? 'dark' : 'light';
         }
 
-        var theme = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-            ? 'dark'
-            : 'light';
-
+        var theme = mode === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode;
+        var dark = ['dark', 'amethyst', 'ember'].includes(theme);
         document.documentElement.dataset.appearance = mode;
         document.documentElement.dataset.theme = theme;
-        document.documentElement.style.colorScheme = theme;
-        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#1e293b' : '#ffffff');
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+        if (window.Capacitor && window.Capacitor.getPlatform() === 'android') document.documentElement.dataset.native = 'true';
+        var colors = {light:'#f8fafc', dark:'#0f172a', sage:'#f6faf4', amethyst:'#181620', ember:'#231f1f'};
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors[theme]);
     } catch (_) {}
 })();
 `;

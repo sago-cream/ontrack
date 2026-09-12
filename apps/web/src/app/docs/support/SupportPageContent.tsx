@@ -78,6 +78,7 @@ export function SupportPageContent() {
             subtitleKey='support.subtitle'
             footerLinks={[
                 { href: '/docs/privacy', labelKey: 'docs.footer.privacy' },
+                { href: '/docs/legal', labelKey: 'docs.footer.legal' },
             ]}
             footerNoteKey='support.footerNote'
         >

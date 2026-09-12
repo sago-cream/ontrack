@@ -41,6 +41,7 @@ export default function DocsIndexPage() {
                 { href: '/docs/settings', label: 'Settings' },
                 { href: '/docs/support', label: 'Support' },
                 { href: '/docs/privacy', label: 'Privacy Policy' },
+                { href: '/docs/legal', label: 'Legal Notices' },
             ]}
             footerNote='Documentation for OnTrack.'
         >

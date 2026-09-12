@@ -20,7 +20,7 @@
 - `apps/ios`：iOS App、Xcode 專案與 Xcode 建置資源
 - `apps/web`：網頁版與公開網站素材
 - `apps/worker`：Cloudflare Worker 部署包裝
-- `assets/app-store/screenshots`：由 `bun run ios:screenshots` 產生的 App Store 截圖
+- `assets/screenshots`：由 `bun run ios:screenshots` 產生的 App Store 截圖
 
 ## 官方版本
 
@@ -85,6 +85,14 @@ bun run lint
 ```sh
 bun run ios
 ```
+
+建置 iOS App、開啟可用的模擬器，並安裝及啟動 App：
+
+```sh
+bun run ios:simulator
+```
+
+若只要編譯 iOS App、不開啟模擬器，請執行 `bun run ios:build`。
 
 若要讓 iOS 腳本指向其他後端，設定 `IOS_API_ORIGIN`：
 

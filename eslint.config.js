@@ -6,7 +6,14 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-    globalIgnores(['.next', 'out', 'apps/web/.next', 'apps/web/out']),
+    globalIgnores([
+        '.next',
+        'out',
+        '**/build',
+        'apps/android/app/src/main/assets',
+        'apps/web/.next',
+        'apps/web/out',
+    ]),
     {
         files: ['**/*.{ts,tsx}'],
         extends: [

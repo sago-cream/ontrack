@@ -64,6 +64,11 @@ function PrivacyContent() {
                 </article>
 
                 <article className={styles.faqItem}>
+                    <h3>{t('privacy.android.title')}</h3>
+                    <p>{t('privacy.android.body')}</p>
+                </article>
+
+                <article className={styles.faqItem}>
                     <h3>{t('privacy.collect.analytics.title')}</h3>
                     <p>{t('privacy.collect.analytics.body')}</p>
                 </article>
@@ -130,6 +135,7 @@ export function PrivacyPageContent() {
             subtitleKey='privacy.subtitle'
             footerLinks={[
                 { href: '/docs/support', labelKey: 'docs.footer.support' },
+                { href: '/docs/legal', labelKey: 'docs.footer.legal' },
             ]}
             footerNoteKey='privacy.footerNote'
         >

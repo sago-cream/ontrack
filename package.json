@@ -13,15 +13,24 @@
         "deploy:dev": "bun run build && wrangler deploy --config apps/worker/wrangler.jsonc",
         "deploy:dev:dry-run": "bun run build && wrangler deploy --dry-run --config apps/worker/wrangler.jsonc",
         "deploy:prod": "bash scripts/worker-deploy-prod.sh",
+        "android": "scripts/android-run.sh",
+        "android:bundle": "scripts/android-bundle.sh",
+        "android:check": "scripts/android-check.sh",
+        "android:publish": "scripts/android-publish.sh",
+        "android:release": "scripts/android-release.sh",
+        "android:screenshots": "scripts/android-capture-play-screenshot.sh",
+        "android:sync": "scripts/android-sync.sh",
+        "android:test:device": "scripts/android-test-device.sh",
         "deploy:prod:check": "bash scripts/worker-deploy-prod.sh --check",
         "deploy:prod:dry-run": "bash scripts/worker-deploy-prod.sh --dry-run",
         "ios": "scripts/ios-run-device.sh",
+        "ios:build": "scripts/ios-build.sh",
         "ios:mock": "scripts/ios-run-mock-device.sh",
         "ios:check": "scripts/ios-check.sh",
         "ios:test": "scripts/ios-domain-tests.sh",
         "ios:store": "scripts/ios-test-storekit.sh",
         "ios:screenshots": "scripts/ios-capture-app-store-screenshots.sh",
-        "ios:simulator": "scripts/ios-build.sh",
+        "ios:simulator": "scripts/ios-run-simulator.sh",
         "ios:archive": "scripts/ios-archive.sh",
         "ios:export": "scripts/ios-export.sh",
         "ios:upload": "scripts/ios-upload.sh",
@@ -30,7 +39,14 @@
         "security:scan": "gitleaks detect --source . --redact --no-banner",
         "test": "bun test apps/worker/tests && bash scripts/worker-deploy-prod.test.sh",
         "format": "prettier --write .",
-        "prepare": "husky"
+        "prepare": "husky",
+        "android:candidate": "scripts/android-candidate.sh",
+        "android:upload": "scripts/android-upload.sh",
+        "android:promote": "scripts/android-promote.sh",
+        "android:store:check": "python3 scripts/android-store-check.py",
+        "android:verify:bundle": "scripts/android-verify-bundle.sh",
+        "android:policy:check": "python3 scripts/android-policy-check.py",
+        "android:test:release": "bash scripts/android-release.test.sh"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx}": [
@@ -42,9 +58,12 @@
         ]
     },
     "devDependencies": {
+        "@capacitor/assets": "3.0.5",
+        "@capacitor/cli": "8.4.2",
         "@cloudflare/workers-types": "^4.20260607.1",
         "@eslint/js": "^9.39.1",
         "@ianvs/prettier-plugin-sort-imports": "^4.7.0",
+        "@types/bun": "^1.4.2",
         "eslint": "^9.39.1",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-react-hooks": "^7.0.1",
@@ -60,5 +79,9 @@
     "overrides": {
         "path-to-regexp": "^8.2.0",
         "undici": "^7.2.0"
+    },
+    "dependencies": {
+        "@capacitor/android": "8.4.2",
+        "@capacitor/core": "8.4.2"
     }
 }

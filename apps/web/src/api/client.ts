@@ -1,10 +1,25 @@
-import { storySchedule, storyStations } from '../fixtures/storyFixtures';
+import {
+    nativeStorySchedule,
+    nativeStoryStations,
+    storySchedule,
+    storyStations,
+} from '../fixtures/storyFixtures';
 import type { TranslationKey } from '../i18n/translations';
 import type { TranslationParams } from '../i18n/types';
+import { usesNativeUI } from '../native/platform';
 import type { ScheduleResponse, Station } from '../types';
 
 // In-flight request cache to prevent duplicate simultaneous requests
 const inflightRequests = new Map<string, Promise<unknown>>();
+
+const API_ORIGIN = process.env.NEXT_PUBLIC_ONTRACK_API_ORIGIN?.replace(
+    /\/$/,
+    ''
+);
+
+function apiUrl(path: string) {
+    return API_ORIGIN ? `${API_ORIGIN}${path}` : path;
+}
 
 // Client-side cache for stations (rarely change, cache for 24 hours)
 let stationsCache: { data: Station[]; expires: number } | null = null;
@@ -35,7 +50,8 @@ type Translate = (key: TranslationKey, params?: TranslationParams) => string;
 
 export function isShowcaseMode() {
     return (
-        process.env.NODE_ENV !== 'production' &&
+        (process.env.NODE_ENV !== 'production' ||
+            process.env.NEXT_PUBLIC_ONTRACK_SHOWCASE_MODE === '1') &&
         typeof window !== 'undefined' &&
         new URLSearchParams(window.location.search).has('showcase')
     );
@@ -187,7 +203,7 @@ function getStatusErrorMessage(statusCode: number | null, t: Translate) {
 export const api = {
     getStations: async (): Promise<Station[]> => {
         if (isShowcaseMode()) {
-            return storyStations;
+            return usesNativeUI() ? nativeStoryStations : storyStations;
         }
 
         const now = Date.now();
@@ -198,7 +214,7 @@ export const api = {
         }
 
         // Fetch fresh data
-        const data = await fetchJson<Station[]>('/api/stations');
+        const data = await fetchJson<Station[]>(apiUrl('/api/stations'));
 
         stationsCache = { data, expires: Date.now() + STATIONS_CACHE_TTL };
         return data;
@@ -211,7 +227,7 @@ export const api = {
         options: { refreshLive?: boolean } = {}
     ) => {
         if (isShowcaseMode()) {
-            return storySchedule;
+            return usesNativeUI() ? nativeStorySchedule : storySchedule;
         }
 
         const params = new URLSearchParams({ origin, dest });
@@ -219,7 +235,7 @@ export const api = {
         if (options.refreshLive) params.append('refreshLive', '1');
 
         return fetchJson<ScheduleResponse>(
-            `/api/schedule?${params.toString()}`
+            apiUrl(`/api/schedule?${params.toString()}`)
         );
     },
 };

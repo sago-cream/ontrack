@@ -37,7 +37,10 @@ const SECURITY_HEADERS = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'geolocation=(self), microphone=(), camera=()',
 };
-const DEFAULT_CORS_ALLOWED_ORIGINS = ['https://ontrack.hsichen.dev'];
+const DEFAULT_CORS_ALLOWED_ORIGINS = [
+    'https://ontrack.hsichen.dev',
+    'https://localhost', // Bundled Android app served by Capacitor.
+];
 const CORS_ALLOWED_METHODS = new Set(['GET']);
 const CORS_ALLOWED_HEADERS = 'Authorization, Content-Type';
 const CORS_MAX_AGE_SECONDS = '86400';
@@ -49,6 +52,7 @@ const PUBLIC_DOCUMENT_PATHS = new Set([
     '/app',
     '/docs',
     '/docs/features',
+    '/docs/legal',
     '/docs/settings',
     '/docs/support',
     '/docs/privacy',

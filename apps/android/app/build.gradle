@@ -1,0 +1,104 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.github.triplet.play'
+
+import com.github.triplet.gradle.androidpublisher.ReleaseStatus
+
+def environment = System.getenv()
+def releaseSigningValues = [
+    environment['ANDROID_KEYSTORE_PATH'],
+    environment['ANDROID_KEYSTORE_PASSWORD'],
+    environment['ANDROID_KEY_ALIAS'],
+    environment['ANDROID_KEY_PASSWORD'],
+]
+def hasAnyReleaseSigningValue = releaseSigningValues.any { it }
+def hasReleaseSigning = releaseSigningValues.every { it }
+def appVersionCode = (findProperty('ontrackVersionCode') ?: environment['ANDROID_VERSION_CODE'] ?: '1').toInteger()
+def appVersionName = findProperty('ontrackVersionName') ?: environment['ANDROID_VERSION_NAME'] ?: '0.2.0'
+
+if (hasAnyReleaseSigningValue && !hasReleaseSigning) {
+    throw new GradleException('ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD must be set together.')
+}
+
+android {
+    compileOptions { coreLibraryDesugaringEnabled true }
+    namespace = "dev.hsichen.ontrack"
+    compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig = true
+    }
+    defaultConfig {
+        applicationId "dev.hsichen.ontrack"
+        buildConfigField 'String', 'PLAY_BILLING_PUBLIC_KEY', groovy.json.JsonOutput.toJson(environment['PLAY_BILLING_PUBLIC_KEY'] ?: '')
+        buildConfigField 'String', 'ONTRACK_API_ORIGIN', groovy.json.JsonOutput.toJson(environment['ANDROID_API_ORIGIN'] ?: 'https://ontrack.hsichen.dev')
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(environment['ANDROID_KEYSTORE_PATH'])
+                storePassword environment['ANDROID_KEYSTORE_PASSWORD']
+                keyAlias environment['ANDROID_KEY_ALIAS']
+                keyPassword environment['ANDROID_KEY_PASSWORD']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+play {
+    defaultToAppBundles.set(true)
+    commit.set((environment['PLAY_VALIDATE_ONLY'] ?: 'true') == 'false')
+    track.set(environment['PLAY_TRACK'] ?: 'internal')
+    releaseStatus.set(ReleaseStatus.valueOf((environment['PLAY_RELEASE_STATUS'] ?: 'draft').toUpperCase()))
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'com.android.billingclient:billing:9.1.0'
+    implementation 'com.google.android.play:app-update:2.1.0'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    androidTestImplementation "androidx.webkit:webkit:$androidxWebkitVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

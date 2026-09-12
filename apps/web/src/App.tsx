@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { RefreshCw, Settings } from 'lucide-react';
+import { RefreshCw, RotateCw, Settings } from 'lucide-react';
 
 import './App.css';
+import './native/parity.css';
 
 import { api, getUserSafeErrorMessage, isShowcaseMode } from './api/client';
 import { SettingsSheet, type AppearanceMode } from './components/SettingsSheet';
@@ -20,6 +21,16 @@ import { TrainBoardingPanel } from './components/TrainBoardingPanel';
 import { storyStations } from './fixtures/storyFixtures';
 import { usePersistence } from './hooks/usePersistence';
 import { useI18n } from './i18n/useI18n';
+import {
+    isAndroid,
+    isDarkTheme,
+    NativeApp,
+    resolvedTheme,
+    SystemBars,
+    themeBackground,
+    usesNativeUI,
+} from './native/platform';
+import { useNativeState } from './native/useNativeState';
 import {
     getDefaultShareMessageTemplate,
     resolveStoredShareMessageTemplate,
@@ -40,10 +51,6 @@ const SHARE_MESSAGE_FORMAT_KEY = 'ontrack_share_message_format';
 const ELECTRONIC_TICKET_ONLY_KEY = 'ontrack_electronic_ticket_only';
 const APPEARANCE_MODE_KEY = 'ontrack_appearance';
 const LEGACY_DARK_MODE_KEY = 'ontrack_dark_mode';
-const THEME_COLOR_BY_MODE = {
-    light: '#ffffff',
-    dark: '#1e293b',
-} satisfies Record<'light' | 'dark', string>;
 
 type SelectedTrainState = {
     scheduleKey: string;
@@ -67,7 +74,14 @@ function getStoredAppearanceMode(): AppearanceMode {
 
     const stored = window.localStorage.getItem(APPEARANCE_MODE_KEY);
 
-    if (stored === 'system' || stored === 'light' || stored === 'dark') {
+    if (
+        stored === 'system' ||
+        stored === 'light' ||
+        stored === 'dark' ||
+        stored === 'sage' ||
+        stored === 'amethyst' ||
+        stored === 'ember'
+    ) {
         return stored;
     }
 
@@ -88,22 +102,6 @@ function getStoredElectronicTicketOnly(): boolean {
     return window.localStorage.getItem(ELECTRONIC_TICKET_ONLY_KEY) === 'true';
 }
 
-function getResolvedAppearanceMode(mode: AppearanceMode) {
-    if (mode !== 'system') {
-        return mode;
-    }
-
-    return window.matchMedia('(prefers-color-scheme: dark)').matches
-        ? 'dark'
-        : 'light';
-}
-
-function setBrowserThemeColor(mode: 'light' | 'dark') {
-    document
-        .querySelector('meta[name="theme-color"]')
-        ?.setAttribute('content', THEME_COLOR_BY_MODE[mode]);
-}
-
 function getShowcaseTimeSelection(): TimeSelection {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -112,12 +110,14 @@ function getShowcaseTimeSelection(): TimeSelection {
     return {
         mode: 'departure',
         dateDigits: `${month}${day}`,
-        timeDigits: '0910',
+        timeDigits: '0941',
     };
 }
 
 function App() {
+    const RefreshIcon = usesNativeUI() ? RotateCw : RefreshCw;
     const { t, language } = useI18n();
+    const native = useNativeState();
     const {
         originId,
         setOriginId,
@@ -137,8 +137,9 @@ function App() {
     const [liveRefreshNonce, setLiveRefreshNonce] = useState(0);
     const [isRefreshingLive, setIsRefreshingLive] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [appearanceMode, setAppearanceMode] =
-        useState<AppearanceMode>('light');
+    const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>(
+        getStoredAppearanceMode
+    );
     const [electronicTicketOnly, setElectronicTicketOnly] = useState(false);
     const [shareMessageTemplate, setShareMessageTemplate] = useState(
         getDefaultShareMessageTemplate('zh-TW')
@@ -191,7 +192,7 @@ function App() {
         hasAppliedShowcaseRouteRef.current = true;
         const timer = window.setTimeout(() => {
             setOriginId(storyStations[0].id);
-            setDestId(storyStations[2].id);
+            setDestId(usesNativeUI() ? '1210' : storyStations[2].id);
             setAutoDetectOrigin(true);
         }, 0);
 
@@ -213,12 +214,33 @@ function App() {
             '(prefers-color-scheme: dark)'
         );
         const applyAppearance = () => {
-            const resolvedMode = getResolvedAppearanceMode(appearanceMode);
+            const resolvedMode = resolvedTheme(
+                appearanceMode,
+                colorSchemeQuery.matches
+            );
 
             document.documentElement.dataset.appearance = appearanceMode;
             document.documentElement.dataset.theme = resolvedMode;
-            document.documentElement.style.colorScheme = resolvedMode;
-            setBrowserThemeColor(resolvedMode);
+            document.documentElement.style.colorScheme = isDarkTheme(
+                resolvedMode
+            )
+                ? 'dark'
+                : 'light';
+            document.documentElement.dataset.native = usesNativeUI()
+                ? 'true'
+                : 'false';
+            document
+                .querySelector('meta[name="theme-color"]')
+                ?.setAttribute('content', themeBackground[resolvedMode]);
+            if (isAndroid())
+                void SystemBars.setStyle({
+                    style: isDarkTheme(resolvedMode) ? 'DARK' : 'LIGHT',
+                }).catch(() => {});
+            if (isAndroid())
+                void NativeApp.appearance({
+                    dark: isDarkTheme(resolvedMode),
+                    background: themeBackground[resolvedMode],
+                }).catch(() => {});
         };
 
         applyAppearance();
@@ -235,7 +257,29 @@ function App() {
     }, [appearanceMode]);
 
     useEffect(() => {
-        if ('serviceWorker' in navigator) {
+        if (!('serviceWorker' in navigator)) return;
+        if (isAndroid()) {
+            // Migrate older APKs that registered the web app's API cache worker.
+            void navigator.serviceWorker
+                .getRegistrations()
+                .then((registrations) =>
+                    Promise.all(
+                        registrations
+                            .filter((registration) => {
+                                const script =
+                                    registration.active?.scriptURL ??
+                                    registration.waiting?.scriptURL ??
+                                    registration.installing?.scriptURL;
+                                return (
+                                    script &&
+                                    new URL(script).pathname === '/sw.js'
+                                );
+                            })
+                            .map((registration) => registration.unregister())
+                    )
+                )
+                .catch(() => {});
+        } else {
             void navigator.serviceWorker.register('/sw.js');
         }
     }, []);
@@ -296,7 +340,9 @@ function App() {
     const isTimeInitialized =
         timeSelection.dateDigits.length === 4 &&
         timeSelection.timeDigits.length === 4;
-    const canLoadSchedule = Boolean(isTimeInitialized && originId && destId);
+    const canLoadSchedule = Boolean(
+        isTimeInitialized && originStation && destStation
+    );
     const canRefreshLive = canLoadSchedule;
     const scheduleSelectionKey = [
         originId,
@@ -342,6 +388,9 @@ function App() {
                 onAppearanceModeChange={handleSetAppearanceMode}
                 electronicTicketOnly={electronicTicketOnly}
                 onElectronicTicketOnlyChange={handleSetElectronicTicketOnly}
+                native={native}
+                originName={originName}
+                destinationName={destName}
                 messageTemplate={shareMessageTemplate}
                 onMessageTemplateChange={handleSetShareMessageTemplate}
             />
@@ -358,7 +407,7 @@ function App() {
                             aria-label={t('train.refreshLiveStatus')}
                             title={t('train.refreshLiveStatus')}
                         >
-                            <RefreshCw
+                            <RefreshIcon
                                 className={
                                     isRefreshingLive ? 'is-spinning' : ''
                                 }
@@ -379,6 +428,9 @@ function App() {
                             title={t('settings.title')}
                         >
                             <Settings aria-hidden='true' />
+                            {native.state.updateVersion ? (
+                                <span className='app-update-dot' />
+                            ) : null}
                         </button>
                     </div>
 
@@ -417,6 +469,7 @@ function App() {
                         electronicTicketOnly={electronicTicketOnly}
                         messageTemplate={shareMessageTemplate}
                         onSelectTrain={handleSelectTrain}
+                        appearanceMode={appearanceMode}
                         refreshLiveNonce={liveRefreshNonce}
                         onRefreshingLiveChange={setIsRefreshingLive}
                     />
