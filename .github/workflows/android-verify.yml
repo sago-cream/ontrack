@@ -94,6 +94,8 @@ jobs:
                   key: aosp-webview-119-f152c1317fee
             - uses: reactivecircus/android-emulator-runner@v2
               with:
+                  # Keep CI reproducible; 37.1.11 crashes during activity transitions.
+                  emulator-build: '15507667' # 36.6.11 stable
                   api-level: ${{ matrix.api }}
                   arch: x86_64
                   target: ${{ matrix.api == 24 && 'default' || 'google_apis' }}
@@ -104,6 +106,12 @@ jobs:
                   script: |
                       if [ '${{ matrix.api }}' = 24 ]; then bash scripts/android-prepare-ci-webview.sh; fi
                       timeout 15m bun run android:test:device
+            - name: Report host diagnostics on emulator failure
+              if: failure()
+              run: |
+                  free -h
+                  df -h
+                  sudo dmesg --ctime | tail -n 80
             - uses: actions/upload-artifact@v4
               if: always()
               with:
