@@ -23,14 +23,13 @@
         "android:test:device": "scripts/android-test-device.sh",
         "deploy:prod:check": "bash scripts/worker-deploy-prod.sh --check",
         "deploy:prod:dry-run": "bash scripts/worker-deploy-prod.sh --dry-run",
-        "ios": "scripts/ios-run-device.sh",
+        "ios": "scripts/ios-run-simulator.sh",
         "ios:build": "scripts/ios-build.sh",
         "ios:mock": "scripts/ios-run-mock-device.sh",
         "ios:check": "scripts/ios-check.sh",
         "ios:test": "scripts/ios-domain-tests.sh",
         "ios:store": "scripts/ios-test-storekit.sh",
         "ios:screenshots": "scripts/ios-capture-app-store-screenshots.sh",
-        "ios:simulator": "scripts/ios-run-simulator.sh",
         "ios:archive": "scripts/ios-archive.sh",
         "ios:export": "scripts/ios-export.sh",
         "ios:upload": "scripts/ios-upload.sh",
@@ -46,7 +45,8 @@
         "android:store:check": "python3 scripts/android-store-check.py",
         "android:verify:bundle": "scripts/android-verify-bundle.sh",
         "android:policy:check": "python3 scripts/android-policy-check.py",
-        "android:test:release": "bash scripts/android-release.test.sh"
+        "android:test:release": "bash scripts/android-release.test.sh",
+        "iphone": "scripts/ios-run-device.sh"
     },
     "lint-staged": {
         "*.{ts,tsx,js,jsx}": [

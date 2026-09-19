@@ -90,13 +90,13 @@ bun run lint
 Run the iOS app on a connected device:
 
 ```sh
-bun run ios
+bun run iphone
 ```
 
 Build, open, install, and launch the iOS app in an available simulator:
 
 ```sh
-bun run ios:simulator
+bun run ios
 ```
 
 To compile the iOS app without opening a simulator, run `bun run ios:build`.
@@ -104,7 +104,7 @@ To compile the iOS app without opening a simulator, run `bun run ios:build`.
 To point iOS scripts at another backend, set `IOS_API_ORIGIN`:
 
 ```sh
-IOS_API_ORIGIN=https://example.com bun run ios
+IOS_API_ORIGIN=https://example.com bun run iphone
 ```
 
 Build, install, and launch the Android app on a connected device or emulator:

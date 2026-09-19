@@ -28,8 +28,8 @@ bun run lint
 For iOS development, the project scripts wrap common Xcode workflows:
 
 ```sh
+bun run iphone
 bun run ios
-bun run ios:simulator
 bun run ios:check
 ```
 

@@ -83,13 +83,13 @@ bun run lint
 在連接的 iPhone 上執行 iOS App：
 
 ```sh
-bun run ios
+bun run iphone
 ```
 
 建置 iOS App、開啟可用的模擬器，並安裝及啟動 App：
 
 ```sh
-bun run ios:simulator
+bun run ios
 ```
 
 若只要編譯 iOS App、不開啟模擬器，請執行 `bun run ios:build`。
@@ -97,7 +97,7 @@ bun run ios:simulator
 若要讓 iOS 腳本指向其他後端，設定 `IOS_API_ORIGIN`：
 
 ```sh
-IOS_API_ORIGIN=https://example.com bun run ios
+IOS_API_ORIGIN=https://example.com bun run iphone
 ```
 
 ## 自行部署
