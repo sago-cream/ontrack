@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-Hant">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>OnTrack · 停駛資訊原型</title>
+        <link rel="stylesheet" href="./prototype.css" />
+    </head>
+    <body>
+        <main class="prototype">
+            <div class="review-controls" aria-label="Prototype controls">
+                <label
+                    ><span>情境 / Scenario</span
+                    ><select id="scenario"></select
+                ></label>
+                <div class="control-pair">
+                    <label
+                        ><span>語言 / Language</span
+                        ><select id="language">
+                            <option value="zh">繁體中文</option>
+                            <option value="en">English</option>
+                        </select></label
+                    >
+                    <label
+                        ><span>外觀 / Theme</span
+                        ><select id="theme">
+                            <option value="light">淺色</option>
+                            <option value="dark">深色</option>
+                        </select></label
+                    >
+                </div>
+                <div class="versions" aria-label="Prototype version">
+                    <button id="before" type="button" aria-pressed="false">
+                        目前 / Current
+                    </button>
+                    <button id="after" type="button" aria-pressed="true">
+                        提案 / Proposed
+                    </button>
+                </div>
+                <p class="simulation">
+                    互動原型 · 全部為模擬資料，非即時列車資訊
+                </p>
+            </div>
+            <section class="app-surface" aria-label="OnTrack prototype">
+                <div class="toolbar">
+                    <span aria-hidden="true" id="refresh-icon"></span
+                    ><span class="time-control" id="time-control"></span
+                    ><span aria-hidden="true" id="settings-icon"></span>
+                </div>
+                <div class="route-panel">
+                    <div>
+                        <span class="route-origin" aria-hidden="true">○</span
+                        ><strong id="origin"></strong>
+                    </div>
+                    <div>
+                        <span class="route-destination" aria-hidden="true"
+                            >⚑</span
+                        ><strong id="destination"></strong
+                        ><span class="swap" aria-hidden="true">⇅</span>
+                    </div>
+                </div>
+                <div class="departure-panel">
+                    <button class="notice" id="notice" hidden></button>
+                    <h2 id="list-title"></h2>
+                    <div class="trains" id="trains"></div>
+                    <h2 id="share-title"></h2>
+                    <div class="share-panel">
+                        <p id="summary" aria-live="polite"></p>
+                        <button id="share" type="button"></button>
+                    </div>
+                    <p id="feedback" class="feedback" role="status"></p>
+                </div>
+            </section>
+            <details class="integration">
+                <summary>資料來源與整合 / Data & integration</summary>
+                <p>
+                    This is an isolated design and data-policy prototype. Run
+                    <code>bun prototypes/train-service/build.ts</code>, then
+                    serve <code>.review/train-service</code> over HTTP. App,
+                    Worker, iOS and Android runtime behavior is unchanged.
+                </p>
+                <p>
+                    <a
+                        href="https://tdx.transportdata.tw/webapi/File/Swagger/V3/5fa88b0c-120b-43f1-b188-c379ddb2593d"
+                        target="_blank"
+                        rel="noopener"
+                        >Official TDX Rail v3 schema</a
+                    >
+                    · verified 2026-11-15
+                </p>
+                <ul>
+                    <li>
+                        <code>DailyTrainTimetable/Today</code> or
+                        <code>DailyTrainTimetable/TrainDate/{date}</code>: train
+                        <code>SuspendedFlag</code> is 0 normal, 1 cancelled, 2
+                        partial; stop <code>SuspendedFlag</code> is 0 open, 1
+                        suspended. The current Worker already fetches both
+                        nested objects.
+                    </li>
+                    <li>
+                        <code>Alert</code> returns <code>Alerts</code> with
+                        affected trains, routes, lines, stops, sections,
+                        validity times and source timestamps. A matching alert
+                        is advisory; <code>Status=2</code> does not confirm
+                        cancellation. Alert direction uses south/north
+                        semantics; timetable direction uses
+                        clockwise/counterclockwise semantics.
+                    </li>
+                    <li>
+                        <code>News</code> returns <code>Newses</code> with
+                        descriptions and official links. Retain for human
+                        inspection; a keyword such as 停駛 cannot establish a
+                        specific train or date is cancelled.
+                    </li>
+                </ul>
+                <p>
+                    The prototype blocks auto recommendation and arrival sharing
+                    for full cancellation, suspended endpoints, unresolved
+                    partial service, stale reports and missing flags. Delay data
+                    never establishes service availability. Broad alerts ask the
+                    user to verify rather than removing trains.
+                </p>
+                <p>
+                    Production integration: preserve flags and full stop lists
+                    before route slicing; map service availability separately
+                    from delay status; key by Taipei service date + train number
+                    + journey; add timestamped service metadata; invalidate
+                    derived OD snapshots after a refresh. Refresh today’s flags
+                    and alerts using a shared, budgeted snapshot with
+                    conditional requests. The 120-second freshness threshold
+                    here is a proposal, not a TDX guarantee. Do not retimestamp
+                    unchanged old content without validation.
+                </p>
+                <p>
+                    Apply eligibility consistently to web/Android, iOS
+                    selection, share summaries and widget projection. Persisted
+                    selected trains must be reconciled when availability
+                    changes. Test all-cancelled and restore transitions, dates,
+                    unknown fields, interior sections, missing times, stale
+                    cache and failed feeds before shipping.
+                </p>
+                <p>
+                    Probe with
+                    <code
+                        >node --env-file=/private/path.env
+                        prototypes/train-service/fetch-tdx.mjs YYYY-MM-DD</code
+                    >. Uses existing TDX credential names and paginates the
+                    responses. An unauthenticated live request returned HTTP
+                    401; fixture scenarios demonstrate schema behavior, not
+                    actual cancelled trains.
+                </p>
+            </details>
+        </main>
+        <dialog id="detail">
+            <div class="detail-header">
+                <h2 id="detail-title"></h2>
+                <button id="close" type="button"></button>
+            </div>
+            <div id="detail-body"></div>
+        </dialog>
+        <script type="module" src="./app.ts"></script>
+    </body>
+</html>

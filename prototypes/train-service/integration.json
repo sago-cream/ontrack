@@ -1,0 +1,180 @@
+{
+    "verifiedAt": "2026-11-15",
+    "source": "https://tdx.transportdata.tw/webapi/File/Swagger/V3/5fa88b0c-120b-43f1-b188-c379ddb2593d",
+    "baseRevision": "6a6a4705e2f24b0277c3757f304c10e880ced558",
+    "scope": "Isolated prototype and data probe; no production runtime changes.",
+    "run": {
+        "build": "bun prototypes/train-service/build.ts",
+        "test": "bun test prototypes/train-service/service.test.ts",
+        "serve": "python3 -m http.server 3142 --bind 127.0.0.1 --directory .review",
+        "url": "http://127.0.0.1:3142/train-service/"
+    },
+    "liveVerification": {
+        "unauthenticatedRequest": "GET /api/basic/v3/Rail/TRA/Alert?$format=JSON&$top=5",
+        "status": 401,
+        "message": "Valid API Key Required",
+        "authenticatedPayloadVerified": false,
+        "fixturesAreSynthetic": true
+    },
+    "confirmedFields": {
+        "PTX.Service.DTO.Rail.Specification.V3.TRA.DailyTrainTimeTable.TrainInfo": {
+            "Direction": {
+                "title": "Int32",
+                "type": "integer",
+                "description": "行駛方向 : [0:'順行',1:'逆行']",
+                "format": "int32"
+            },
+            "SuspendedFlag": {
+                "title": "Int32",
+                "type": "integer",
+                "description": "列車是否停駛 : [0:'正常行駛',1:'停駛',2:'部份停駛']",
+                "format": "int32"
+            }
+        },
+        "PTX.Service.DTO.Rail.Specification.V3.TRA.DailyTrainTimeTable.StopTime": {
+            "SuspendedFlag": {
+                "title": "Int32",
+                "type": "integer",
+                "description": "本站是否停駛 : [0:'否',1:'是']",
+                "format": "int32"
+            }
+        },
+        "PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.Alert": {
+            "Status": {
+                "title": "Int32",
+                "type": "integer",
+                "description": "營運狀況 : [0:'全線營運停止',1:'全線營運正常',2:'有異常狀況']",
+                "format": "int32"
+            },
+            "Scope": {
+                "title": "AlertScope",
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.AlertScope"
+                    }
+                ],
+                "description": "影響範圍",
+                "nullable": true,
+                "xml": {
+                    "name": "AlertScope"
+                }
+            },
+            "Direction": {
+                "title": "Int32",
+                "type": "integer",
+                "description": "影響方向 : [0:'南下',1:'北上',2:'雙向']",
+                "format": "int32",
+                "nullable": true
+            },
+            "StartTime": {
+                "type": "string",
+                "description": "訊息起始日期時間",
+                "format": "date-time",
+                "nullable": true
+            },
+            "EndTime": {
+                "type": "string",
+                "description": "訊息結束日期時間",
+                "format": "date-time",
+                "nullable": true
+            }
+        },
+        "PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.AlertScope": {
+            "Stations": {
+                "title": "AlertScopeStation[]",
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.AlertScopeStation"
+                },
+                "description": "受影響的車站",
+                "nullable": true,
+                "xml": {
+                    "name": "AlertScopeStation[]"
+                }
+            },
+            "Trains": {
+                "title": "AlertScopeTrain[]",
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.AlertScopeTrain"
+                },
+                "description": "受影響的車次",
+                "nullable": true,
+                "xml": {
+                    "name": "AlertScopeTrain[]"
+                }
+            },
+            "LineSections": {
+                "title": "AlertScopeLineSection[]",
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PTX.Service.DTO.Rail.Specification.V3.TRA.TRAAlertList.AlertScopeLineSection"
+                },
+                "description": "受影響的路線區間",
+                "nullable": true,
+                "xml": {
+                    "name": "AlertScopeLineSection[]"
+                }
+            }
+        }
+    },
+    "integrationPoints": [
+        {
+            "file": "apps/worker/src/refresh.ts",
+            "function": "refreshTimetable",
+            "finding": "Already requests TrainInfo and StopTimes. Raw nested SuspendedFlag can be retained without changing the select."
+        },
+        {
+            "file": "apps/worker/src/types.ts",
+            "function": "TDXFullTimetable / TDXStopTime",
+            "finding": "SuspendedFlag, StopSequence and source metadata are not typed."
+        },
+        {
+            "file": "apps/worker/src/index.ts",
+            "function": "mapTrainToAppTrainInfo",
+            "finding": "Only delayMap determines status. cancelled is in the response union but never assigned."
+        },
+        {
+            "file": "apps/worker/src/refresh.ts",
+            "function": "filterRouteTimetables",
+            "finding": "Stores only selected origin/destination stops. Classify partial service before slicing or retain full journey stop context."
+        },
+        {
+            "file": "apps/worker/src/refresh.ts",
+            "function": "ensureTimetable / deriveRouteFromDailySnapshot",
+            "finding": "Cached daily and derived OD schedules need explicit service-age policy and invalidation after refreshed flags."
+        },
+        {
+            "file": "apps/web/src/components/TrainList.tsx",
+            "function": "buildDisplayState / TrainList",
+            "finding": "Recommendations and row labels need service eligibility independent of delay sorting."
+        },
+        {
+            "file": "apps/ios/OnTrack/ContentView.swift",
+            "function": "TrainCard / selectTrain",
+            "finding": "Display suspension inline and guard selection, share and persisted widget projection."
+        },
+        {
+            "file": "apps/ios/OnTrackWidget/WidgetTimelineLoader.swift",
+            "function": "timelineEntries / snapshot",
+            "finding": "Already excludes cancelled. Extend protection to unresolved partial and stale service states; reconcile existing snapshots."
+        }
+    ],
+    "proposedRollout": [
+        "Validate authenticated production payloads and update frequency, including an actual partial suspension, before choosing a refresh budget.",
+        "Model service availability separately from live delay status. Keep date+train+origin+destination and source/fetch times.",
+        "Use shared budgeted refresh, conditional requests where supported, and atomic derived-route invalidation. Old content must not receive a new freshness timestamp unless validated.",
+        "Use Alert structured scopes as candidate advisories. Confirm section overlap with ordered station/line topology before claiming this journey is affected. Alert.Direction is south/north while timetable Direction is clockwise/counterclockwise.",
+        "Do not infer cancellation from no live-board record, missing timetable entry, an Alert Status=2, or a News keyword. Keep uncertain evidence as a human-readable notice.",
+        "Normalize cancellation before parsing nullable stop times so withdrawn departures are retained as cancelled notices.",
+        "Ship web/Android and iOS selection, sharing and widget eligibility together after accepting the visual and behavior decisions."
+    ],
+    "prototypePolicy": {
+        "freshnessSeconds": 120,
+        "isProviderGuarantee": false,
+        "partial": "Block automatic recommendation; open endpoints alone cannot confirm a through journey.",
+        "alert": "Candidate route advisory; block auto recommendation in this prototype pending human verification. Do not relabel as cancelled.",
+        "stale": "Keep last reported cancellation in details; row says recheck.",
+        "share": "Preview only; no real outbound sharing."
+    }
+}
