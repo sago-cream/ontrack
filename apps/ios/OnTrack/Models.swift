@@ -104,7 +104,7 @@ struct TrainInfo: Decodable, Identifiable {
     var suspendedStations: [String]? = nil
 
     var canBoard: Bool {
-        status != .cancelled && suspension == nil &&
+        status != .cancelled && !["full", "origin-stop", "destination-stop"].contains(suspension ?? "") &&
             Self.isClock(departureTime) && Self.isClock(arrivalTime)
     }
 

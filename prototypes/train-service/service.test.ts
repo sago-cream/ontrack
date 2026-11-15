@@ -30,10 +30,10 @@ describe('journey service eligibility', () => {
             assessService(data.trains[0], '1000', '1210', data.snapshot).cause
         ).toBe('endpoint');
     });
-    test('open endpoints do not establish a through journey on a partial train', () => {
+    test('a partial flag alone does not exclude a journey with open endpoints', () => {
         expect(assess('partial')).toMatchObject({
             kind: 'partial',
-            recommend: false,
+            recommend: true,
             flaggedStations: ['板橋'],
         });
     });
@@ -49,14 +49,14 @@ describe('journey service eligibility', () => {
     test('missing flags are unknown rather than normal or cancelled', () => {
         expect(assess('unavailable')).toMatchObject({
             kind: 'unknown',
-            recommend: false,
+            recommend: true,
         });
     });
     test('stale cancellation is labelled for rechecking', () => {
         expect(assess('stale')).toMatchObject({
             kind: 'unknown',
             cause: 'stale',
-            recommend: false,
+            recommend: true,
         });
     });
     test('fresh explicit normal service is eligible without any live-board record', () => {

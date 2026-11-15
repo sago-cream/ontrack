@@ -116,12 +116,12 @@
                     </li>
                 </ul>
                 <p>
-                    The prototype hides trains with full cancellation, suspended
-                    endpoints, unresolved partial service, stale reports or
-                    missing flags, and excludes them from recommendation and
-                    sharing. Delay data never establishes service availability.
-                    Broad alerts ask the user to verify rather than removing
-                    trains.
+                    The prototype hides confirmed whole-train or
+                    selected-endpoint cancellations. Unknown status, missing
+                    flags and a partial flag alone keep scheduled trains
+                    available. Delay data never establishes service
+                    availability. Broad alerts ask the user to verify rather
+                    than removing trains.
                 </p>
                 <p>
                     Production follow-up: validate authenticated payload
@@ -148,9 +148,10 @@
                         >node --env-file=/private/path.env
                         prototypes/train-service/fetch-tdx.mjs YYYY-MM-DD</code
                     >. Uses existing TDX credential names and paginates the
-                    responses. An unauthenticated live request returned HTTP
-                    401; fixture scenarios demonstrate schema behavior, not
-                    actual cancelled trains.
+                    responses. Authenticated timetable data was checked for
+                    2026-11-15: 921 train flags and 21,101 stop flags were all
+                    normal. Fixture cancellation scenarios demonstrate schema
+                    behavior, not observed cancelled trains.
                 </p>
             </details>
         </main>

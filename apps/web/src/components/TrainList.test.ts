@@ -151,18 +151,7 @@ describe('suspended train selection', () => {
         ];
         const rows: TrainInfo[] = [
             cancelled,
-            {
-                ...cancelled,
-                trainNo: '124',
-                status: 'unknown',
-                suspension: 'partial',
-            },
-            {
-                ...cancelled,
-                trainNo: '123',
-                status: 'unknown',
-                suspension: 'unknown',
-            },
+            { ...cancelled, trainNo: '124', suspension: 'origin-stop' },
             { ...cancelled, trainNo: '122', suspension: 'destination-stop' },
             { ...running, trainNo: '121', departureTime: '--:--' },
             ...usable,
@@ -182,6 +171,44 @@ describe('suspended train selection', () => {
             expect(state.recommendedTrain?.trainNo).toBe(
                 mode === 'arrival' ? '128' : '126'
             );
+        }
+    });
+    test('keeps upcoming scheduled trains when live status or suspension flags are unconfirmed', () => {
+        const upcoming: TrainInfo[] = [
+            { ...train('1273', '21:50', '23:33'), status: 'unknown' },
+            {
+                ...train('157', '21:55', '23:14'),
+                status: 'unknown',
+                suspension: 'unknown',
+            },
+            {
+                ...train('1271', '22:15', '23:52'),
+                status: 'unknown',
+                suspension: 'partial',
+            },
+            { ...train('1281', '22:40', '00:16'), status: 'unknown' },
+        ];
+        const state = buildDisplayState(upcoming, '21:47', 'departure');
+        expect(state.displayTrains.map((t) => t.trainNo)).toEqual([
+            '1273',
+            '157',
+            '1271',
+        ]);
+        expect(state.recommendedTrain?.trainNo).toBe('1273');
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
+            const trains = upcoming.slice(0, 3);
+            expect(
+                buildDisplayState(
+                    trains,
+                    mode === 'arrival' ? '23:59' : '21:47',
+                    mode
+                ).displayTrains
+            ).toHaveLength(3);
         }
     });
     test('restoring a cancelled train makes it eligible again', () => {

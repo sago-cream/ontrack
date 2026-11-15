@@ -43,7 +43,7 @@ export function assessService(
     ): ServiceState => ({
         kind,
         cause,
-        recommend: kind === 'normal',
+        recommend: kind !== 'cancelled',
         flaggedStations,
     });
     const age = snapshot.fetchedAt
@@ -54,14 +54,13 @@ export function assessService(
         start < 0 ||
         end < 0
     ) {
-        return result('unknown', 'missing');
+        return { ...result('unknown', 'missing'), recommend: false };
     }
     if (!snapshot.fetchedAt) return result('unknown', 'missing');
-    if (
-        !Number.isFinite(age) ||
-        age < 0 ||
-        age > (snapshot.maxAgeSeconds ?? 120)
-    ) {
+    if (!Number.isFinite(age) || age < 0) {
+        return { ...result('unknown', 'stale'), recommend: false };
+    }
+    if (age > (snapshot.maxAgeSeconds ?? 120)) {
         return result('unknown', 'stale');
     }
     if (timetable.TrainInfo.SuspendedFlag === 1)
@@ -69,8 +68,7 @@ export function assessService(
     if (stops[start].SuspendedFlag === 1 || stops[end].SuspendedFlag === 1) {
         return result('cancelled', 'endpoint');
     }
-    // A partial train flag does not identify a suspended running section.
-    // Even two open endpoints cannot establish a through journey.
+    // A partial flag alone does not prove that the selected journey is cancelled.
     if (timetable.TrainInfo.SuspendedFlag === 2 || flaggedStations.length > 0) {
         return result('partial', 'partial');
     }

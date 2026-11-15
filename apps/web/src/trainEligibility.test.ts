@@ -38,14 +38,28 @@ describe('electronic ticket train eligibility', () => {
     });
 });
 
-test('boarding eligibility excludes cancelled, partial, unknown and withdrawn times', () => {
-    expect(canBoardTrain(train('區間'))).toBe(true);
+test('only confirmed journey cancellations or unusable times exclude boarding', () => {
+    for (const suspension of [
+        'full',
+        'origin-stop',
+        'destination-stop',
+    ] as const)
+        expect(canBoardTrain({ ...train('區間'), suspension })).toBe(false);
     expect(canBoardTrain({ ...train('區間'), status: 'cancelled' })).toBe(
         false
     );
-    for (const suspension of ['partial', 'unknown'] as const)
-        expect(canBoardTrain({ ...train('區間'), suspension })).toBe(false);
     expect(canBoardTrain({ ...train('區間'), departureTime: '--:--' })).toBe(
         false
     );
+    expect(canBoardTrain({ ...train('區間'), arrivalTime: '--:--' })).toBe(
+        false
+    );
+});
+
+test('missing live data and unconfirmed service flags keep scheduled trains visible', () => {
+    for (const suspension of [undefined, null, 'unknown', 'partial'] as const) {
+        expect(
+            canBoardTrain({ ...train('區間'), status: 'unknown', suspension })
+        ).toBe(true);
+    }
 });
