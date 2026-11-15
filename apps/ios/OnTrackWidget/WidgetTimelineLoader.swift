@@ -46,7 +46,8 @@ enum WidgetTimelineLoader {
             )
 
             guard let firstEntry = entries.first else {
-                return fallbackResult(snapshot: fallbackSnapshot, now: now)
+                WidgetSnapshotStore.clear(reloadTimelines: false)
+                return fallbackResult(snapshot: nil, now: now)
             }
 
             if let snapshot = firstEntry.snapshot {
@@ -90,7 +91,7 @@ enum WidgetTimelineLoader {
         now: Date
     ) -> [TrainWidgetEntry] {
         let transitionDates = response.trains
-            .filter { $0.status != .cancelled }
+            .filter(\.canBoard)
             .compactMap { departureDate(for: $0, scheduleDate: response.date) }
             .filter { $0 > now && $0 <= now.addingTimeInterval(futureEntryWindow) }
             .map { $0.addingTimeInterval(60) }

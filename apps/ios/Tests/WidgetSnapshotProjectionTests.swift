@@ -7,6 +7,7 @@ enum WidgetSnapshotProjectionTests {
         removesExpiredLiveStatusBeforeProjection()
         ignoresCancelledRecommendedTrains()
         removesLiveStatusFromStoredSnapshots()
+        serviceAvailability()
         print("WidgetSnapshotProjectionTests passed")
     }
 
@@ -57,6 +58,28 @@ enum WidgetSnapshotProjectionTests {
 
         expect(displayed?.delayMinutes == nil, "stale stored primary delay should be removed")
         expect(displayed?.trainCards?.first?.delayMinutes == nil, "stale stored card delays should be removed")
+    }
+
+    private static func serviceAvailability() {
+        var partial = delayedTrain
+        partial.suspension = "partial"
+        let cancelled = train(number: "125", departure: "09:38", arrival: "10:54", delay: 4, status: .cancelled)
+        let running = train(number: "126", departure: "09:54", arrival: "11:10", delay: 0, status: .onTime)
+        for mode in [TimeMode.departure, .arrival, .lastTrain] {
+            let display = TrainDisplay.displaySchedule(trains: [cancelled, partial], targetTime: "09:41", timeMode: mode)
+            expect(display.recommendedTrain == nil, "unavailable trains must not be recommended in any time mode")
+        }
+        let display = TrainDisplay.displaySchedule(trains: [cancelled, running], targetTime: "09:41", timeMode: .departure)
+        expect(display.trains.first?.trainNo == "125", "recently cancelled row remains inspectable")
+        expect(display.recommendedTrain?.trainNo == "126", "choose the next boardable train")
+        expect(project(source: .selected(primary: partial, cards: [partial]), projectedAt: fetchedAt) == nil, "selected partial train cannot create a shareable widget")
+        expect(project(source: .selected(primary: cancelled, cards: [cancelled]), projectedAt: fetchedAt) == nil, "selected cancellation cannot create a shareable widget")
+        let snapshot = project(source: .selected(primary: running, cards: [cancelled, partial, running]), projectedAt: fetchedAt)
+        expect(snapshot?.trainCards?.count == 1, "unavailable cards cannot leak into widgets")
+        partial.suspension = nil
+        expect(partial.canBoard, "fresh restored data permits selection")
+        partial.suspension = "future-status"
+        expect(!partial.canBoard, "unrecognized service state must not be boardable")
     }
 
     private static func project(

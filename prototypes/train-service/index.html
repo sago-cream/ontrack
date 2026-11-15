@@ -76,8 +76,10 @@
                 <p>
                     This is an isolated design and data-policy prototype. Run
                     <code>bun prototypes/train-service/build.ts</code>, then
-                    serve <code>.review/train-service</code> over HTTP. App,
-                    Worker, iOS and Android runtime behavior is unchanged.
+                    serve <code>.review/train-service</code> over HTTP. The
+                    draft also includes timetable flag mapping and matching
+                    web/native iOS screens. Route advisories and stale-report
+                    expiry remain prototype policies.
                 </p>
                 <p>
                     <a
@@ -121,15 +123,15 @@
                     user to verify rather than removing trains.
                 </p>
                 <p>
-                    Production integration: preserve flags and full stop lists
-                    before route slicing; map service availability separately
-                    from delay status; key by Taipei service date + train number
-                    + journey; add timestamped service metadata; invalidate
-                    derived OD snapshots after a refresh. Refresh today’s flags
-                    and alerts using a shared, budgeted snapshot with
-                    conditional requests. The 120-second freshness threshold
-                    here is a proposal, not a TDX guarantee. Do not retimestamp
-                    unchanged old content without validation.
+                    Production follow-up: validate authenticated payload
+                    freshness and refresh budgets; map service availability
+                    separately from delay status; key by Taipei service date +
+                    train number + journey; add timestamped service metadata;
+                    invalidate derived OD snapshots after a refresh. Refresh
+                    today’s flags and alerts using a shared, budgeted snapshot
+                    with conditional requests. The 120-second freshness
+                    threshold here is a proposal, not a TDX guarantee. Do not
+                    retimestamp unchanged old content without validation.
                 </p>
                 <p>
                     Apply eligibility consistently to web/Android, iOS

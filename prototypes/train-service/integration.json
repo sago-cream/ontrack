@@ -2,7 +2,7 @@
     "verifiedAt": "2026-11-15",
     "source": "https://tdx.transportdata.tw/webapi/File/Swagger/V3/5fa88b0c-120b-43f1-b188-c379ddb2593d",
     "baseRevision": "6a6a4705e2f24b0277c3757f304c10e880ced558",
-    "scope": "Isolated prototype and data probe; no production runtime changes.",
+    "scope": "Interactive policy prototype plus initial Worker flag mapping, real web and native iOS suspension states and eligibility guards.",
     "run": {
         "build": "bun prototypes/train-service/build.ts",
         "test": "bun test prototypes/train-service/service.test.ts",
@@ -176,5 +176,17 @@
         "alert": "Candidate route advisory; block auto recommendation in this prototype pending human verification. Do not relabel as cancelled.",
         "stale": "Keep last reported cancellation in details; row says recheck.",
         "share": "Preview only; no real outbound sharing."
-    }
+    },
+    "implemented": [
+        "TDX train/stop suspension flags projected independently from live delays",
+        "Suspended stop names retained through OD slicing; derived routes rebuilt after daily source changes with source fetch age preserved",
+        "Web and native iOS row labels, service details and next-available selection",
+        "Arrival sharing and widget guards for cancelled, unresolved partial and unknown service",
+        "Debug-only matched showcase scenarios for both clients"
+    ],
+    "remainingProposals": [
+        "Route Alert/News ingestion and advisory UI in the actual clients",
+        "An intraday timetable refresh budget and source freshness limit validated against authenticated payloads",
+        "Automatic stale-suspension expiry; 120 seconds remains a prototype-only policy"
+    ]
 }

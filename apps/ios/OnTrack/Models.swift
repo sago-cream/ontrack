@@ -100,6 +100,34 @@ struct TrainInfo: Decodable, Identifiable {
     let price: Int?
     let delay: Int?
     let status: TrainStatus
+    var suspension: String? = nil
+    var suspendedStations: [String]? = nil
+
+    var canBoard: Bool {
+        status != .cancelled && suspension == nil &&
+            Self.isClock(departureTime) && Self.isClock(arrivalTime)
+    }
+
+    private static func isClock(_ value: String) -> Bool {
+        let parts = value.split(separator: ":").compactMap { Int($0) }
+        return value.count == 5 && value.dropFirst(2).first == ":" && parts.count == 2 && (0...23).contains(parts[0]) && (0...59).contains(parts[1])
+    }
+
+    var serviceLabel: String {
+        if status == .cancelled || ["full", "origin-stop", "destination-stop"].contains(suspension ?? "") {
+            return AppText.serviceCancelled
+        }
+        return suspension == "partial" ? AppText.servicePartial : AppText.serviceUnverified
+    }
+
+    var serviceDescription: String {
+        switch suspension {
+        case "partial": AppText.servicePartialDescription
+        case "unknown": AppText.serviceUnverifiedDescription
+        case "origin-stop", "destination-stop": AppText.serviceStopDescription
+        default: status == .cancelled ? AppText.serviceCancelledDescription : AppText.serviceUnverifiedDescription
+        }
+    }
 
     var id: String { trainNo }
 
@@ -279,11 +307,25 @@ enum TrainDisplay {
         return "NT$\(price.formatted())"
     }
 
+    static func snapshotTime(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fractional = parser.date(from: raw)
+        parser.formatOptions = [.withInternetDateTime]
+        guard let date = fractional ?? parser.date(from: raw) else { return nil }
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "Asia/Taipei")
+        formatter.dateFormat = "yyyy/MM/dd HH:mm"
+        return formatter.string(from: date)
+    }
+
     static func adjustedTime(_ time: String, delay: Int?) -> String {
         addMinutes(delay ?? 0, to: time)
     }
 
     static func tripDuration(departure: String, arrival: String) -> String {
+        guard departure != "--:--", arrival != "--:--" else { return "—" }
         let minutes = tripMinutes(departure: departure, arrival: arrival)
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
@@ -300,7 +342,7 @@ enum TrainDisplay {
         let comparisonMinutes: (TrainInfo) -> Int = { train in
             switch timeMode {
             case .now, .departure, .lastTrain:
-                timeToMinutes(train.departureTime) + (train.delay ?? 0)
+                timeToMinutes(train.departureTime) + (train.canBoard ? (train.delay ?? 0) : 0)
             case .arrival:
                 timeToMinutes(train.arrivalTime)
             }
@@ -313,41 +355,47 @@ enum TrainDisplay {
             }
             .map(\.element)
 
+        func result(_ window: [TrainInfo], candidates: [TrainInfo], preferLast: Bool = false) -> DisplaySchedule {
+            let available = window.filter(\.canBoard)
+            var recommended = preferLast ? available.last : available.first
+            var visible = window
+            if recommended == nil {
+                let usable = candidates.filter(\.canBoard)
+                recommended = preferLast ? usable.last : usable.first
+                if let recommended {
+                    visible = (Array(window.prefix(2)) + [recommended]).sorted { comparisonMinutes($0) < comparisonMinutes($1) }
+                }
+            }
+            return DisplaySchedule(trains: visible, recommendedTrain: recommended)
+        }
+
         if timeMode == .arrival {
             let latestArrivalIndex = orderedTrains.lastIndex {
                 comparisonMinutes($0) <= targetMinutes
             }
             guard let latestArrivalIndex else {
                 let displayTrains = Array(orderedTrains.prefix(3))
-                return DisplaySchedule(
-                    trains: displayTrains,
-                    recommendedTrain: displayTrains.first
-                )
+                return result(displayTrains, candidates: orderedTrains)
             }
             let start = max(orderedTrains.startIndex, latestArrivalIndex - 2)
             let displayTrains = Array(orderedTrains[start...latestArrivalIndex])
 
-            return DisplaySchedule(
-                trains: displayTrains,
-                recommendedTrain: displayTrains.last
-            )
+            return result(displayTrains, candidates: Array(orderedTrains[...latestArrivalIndex]), preferLast: true)
         }
         let nextCatchableIndex = orderedTrains.firstIndex {
-            timeToMinutes($0.departureTime) + ($0.delay ?? 0) >= targetMinutes
+            let minutes = comparisonMinutes($0)
+            return minutes >= targetMinutes || (timeMode != .lastTrain && !$0.canBoard && minutes >= targetMinutes - 15)
         }
 
         guard let nextCatchableIndex else {
             let displayTrains = Array(orderedTrains.suffix(3))
-            return DisplaySchedule(trains: displayTrains, recommendedTrain: displayTrains.last)
+            return result(displayTrains, candidates: orderedTrains, preferLast: true)
         }
 
         let end = min(orderedTrains.count, nextCatchableIndex + 3)
         let displayTrains = Array(orderedTrains[nextCatchableIndex..<end])
 
-        return DisplaySchedule(
-            trains: displayTrains,
-            recommendedTrain: displayTrains.first
-        )
+        return result(displayTrains, candidates: Array(orderedTrains[nextCatchableIndex...]))
     }
 
     private static func tripMinutes(departure: String, arrival: String) -> Int {
@@ -368,7 +416,7 @@ enum TrainDisplay {
     private static func timeToMinutes(_ time: String) -> Int {
         let parts = time.split(separator: ":").compactMap { Int($0) }
         guard parts.count == 2 else {
-            return 0
+            return 24 * 60
         }
 
         return parts[0] * 60 + parts[1]
@@ -660,6 +708,19 @@ enum AppText {
     static var queryTodayLastTrain: String { isZh ? "查詢今日末班車" : "Find today's last train" }
     static var chooseRoute: String { isZh ? "選擇路線" : "Choose a route" }
     static var noTrainsAvailable: String { isZh ? "查無可搭乘班次" : "No trains available" }
+    static var serviceCancelled: String { isZh ? "停駛" : "Cancelled" }
+    static var servicePartial: String { isZh ? "部分停駛" : "Partial" }
+    static var serviceUnverified: String { isZh ? "待確認" : "Unverified" }
+    static var serviceDetails: String { isZh ? "行駛資訊" : "Service details" }
+    static var serviceCancelledDescription: String { isZh ? "此車次全程停駛，請選擇其他列車。" : "This train is cancelled throughout its journey. Choose another train." }
+    static var servicePartialDescription: String { isZh ? "此車次部分停駛，目前資料不足以確認可全程搭乘，請先向臺鐵確認。" : "This train is partly suspended. A through journey cannot be confirmed. Verify with TRA before travelling." }
+    static var serviceUnverifiedDescription: String { isZh ? "目前無法確認此車次的行駛狀況，請先向臺鐵確認。" : "Service availability for this train cannot be confirmed. Verify with TRA before travelling." }
+    static var serviceStopDescription: String { isZh ? "此車次在您的出發站或抵達站停駛，無法完成所選行程。" : "This train does not serve your departure or arrival station. It cannot complete the selected journey." }
+    static var serviceSource: String { isZh ? "來源：TDX 臺鐵時刻表" : "Source: TDX TRA timetable" }
+    static var officialNotices: String { isZh ? "查看臺鐵營運公告" : "Open TRA service notices" }
+    static func suspendedStops(_ names: [String]) -> String { isZh ? "停駛車站：" + names.joined(separator: "、") : "Suspended stops: " + names.joined(separator: ", ") }
+    static func serviceSnapshot(_ time: String) -> String { isZh ? "資料擷取時間：\(time)" : "Snapshot fetched: \(time)" }
+
     static var origin: String { isZh ? "出發站" : "Origin" }
     static var destination: String { isZh ? "抵達站" : "Destination" }
     static var selectOrigin: String { isZh ? "選擇出發站" : "Select origin" }

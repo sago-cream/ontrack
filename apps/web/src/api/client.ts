@@ -3,6 +3,7 @@ import {
     nativeStoryStations,
     storySchedule,
     storyStations,
+    withServiceScenario,
 } from '../fixtures/storyFixtures';
 import type { TranslationKey } from '../i18n/translations';
 import type { TranslationParams } from '../i18n/types';
@@ -227,7 +228,10 @@ export const api = {
         options: { refreshLive?: boolean } = {}
     ) => {
         if (isShowcaseMode()) {
-            return usesNativeUI() ? nativeStorySchedule : storySchedule;
+            return withServiceScenario(
+                usesNativeUI() ? nativeStorySchedule : storySchedule,
+                new URLSearchParams(window.location.search).get('service')
+            );
         }
 
         const params = new URLSearchParams({ origin, dest });

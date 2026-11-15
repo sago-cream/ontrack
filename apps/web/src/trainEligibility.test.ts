@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { supportsElectronicTicket } from './trainEligibility';
+import { canBoardTrain, supportsElectronicTicket } from './trainEligibility';
 import type { TrainInfo } from './types';
 
 function train(trainType: string): TrainInfo {
@@ -36,4 +36,16 @@ describe('electronic ticket train eligibility', () => {
     ])('excludes %s trains', (trainType) => {
         expect(supportsElectronicTicket(train(trainType))).toBe(false);
     });
+});
+
+test('boarding eligibility excludes cancelled, partial, unknown and withdrawn times', () => {
+    expect(canBoardTrain(train('區間'))).toBe(true);
+    expect(canBoardTrain({ ...train('區間'), status: 'cancelled' })).toBe(
+        false
+    );
+    for (const suspension of ['partial', 'unknown'] as const)
+        expect(canBoardTrain({ ...train('區間'), suspension })).toBe(false);
+    expect(canBoardTrain({ ...train('區間'), departureTime: '--:--' })).toBe(
+        false
+    );
 });

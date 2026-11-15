@@ -27,6 +27,7 @@
     --color-primary-selected: rgba(53, 125, 233, 0.08);
     --color-primary-ring: rgba(53, 125, 233, 0.44);
     --color-focus-ring: rgba(53, 125, 233, 0.48);
+    --color-warning: #92400e;
     --color-danger: #dc2626;
     --color-danger-subtle: rgba(220, 38, 38, 0.1);
     --color-danger-ring: rgba(220, 38, 38, 0.28);
@@ -128,6 +129,7 @@
     --color-primary-selected: rgba(53, 125, 233, 0.16);
     --color-primary-ring: rgba(53, 125, 233, 0.56);
     --color-focus-ring: rgba(53, 125, 233, 0.64);
+    --color-warning: #fcd34d;
     --color-danger: #ef4444;
     --color-danger-subtle: rgba(239, 68, 68, 0.16);
     --color-danger-ring: rgba(239, 68, 68, 0.36);

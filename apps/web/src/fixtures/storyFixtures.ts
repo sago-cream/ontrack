@@ -111,3 +111,53 @@ export const nativeStorySchedule: ScheduleResponse = {
         status: row[6] ? 'delayed' : 'on-time',
     })),
 };
+
+// Development-only caller in APIClient uses the same states as native showcase data.
+export function withServiceScenario(
+    schedule: ScheduleResponse,
+    scenario: string | null
+): ScheduleResponse {
+    return {
+        ...schedule,
+        meta: {
+            scheduleCacheStatus: 'hit',
+            scheduleSnapshotFetchedAt: '2026-11-15T01:40:00.000Z',
+            liveDataStatus: 'fresh',
+            liveDataFetchedAt: null,
+            liveDataAgeSeconds: 0,
+        },
+        trains: schedule.trains.map((train) => {
+            const target =
+                scenario === 'all' ||
+                scenario === 'unavailable' ||
+                train.trainNo === '125';
+            if (!target) return train;
+            const suspension: TrainInfo['suspension'] =
+                scenario === 'cancelled' || scenario === 'all'
+                    ? 'full'
+                    : scenario === 'endpoint'
+                      ? 'destination-stop'
+                      : scenario === 'partial'
+                        ? 'partial'
+                        : scenario === 'unknown' || scenario === 'unavailable'
+                          ? 'unknown'
+                          : null;
+            return {
+                ...train,
+                suspension,
+                suspendedStations:
+                    scenario === 'partial'
+                        ? ['板橋']
+                        : scenario === 'endpoint'
+                          ? ['新竹']
+                          : [],
+                status:
+                    suspension === 'full' || suspension === 'destination-stop'
+                        ? 'cancelled'
+                        : suspension
+                          ? 'unknown'
+                          : train.status,
+            };
+        }),
+    };
+}

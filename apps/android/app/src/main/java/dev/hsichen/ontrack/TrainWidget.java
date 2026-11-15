@@ -118,6 +118,10 @@ public class TrainWidget extends AppWidgetProvider {
     for (int i = 0; i < trains.length(); i++) {
       JSONObject train = trains.optJSONObject(i);
       if (train == null
+          || "cancelled".equals(train.optString("status"))
+          || !train.isNull("suspension")
+          || !train.optString("departureTime").matches("([01][0-9]|2[0-3]):[0-5][0-9]")
+          || !train.optString("arrivalTime").matches("([01][0-9]|2[0-3]):[0-5][0-9]")
           || (snapshot.optBoolean("electronicTicketOnly")
               && !eligible(train.optString("trainType")))) continue;
       if (minutes(train.optString("departureTime")) + train.optInt("delay")

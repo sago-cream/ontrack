@@ -171,7 +171,7 @@ private enum MockAPI {
             trains: mockTrains(origin: origin, destination: destination),
             meta: ScheduleMeta(
                 scheduleCacheStatus: .hit,
-                scheduleSnapshotFetchedAt: nil,
+                scheduleSnapshotFetchedAt: "2026-11-15T01:40:00.000Z",
                 liveDataStatus: .fresh,
                 liveDataFetchedAt: nil,
                 liveDataAgeSeconds: 0
@@ -312,7 +312,27 @@ private enum MockAPI {
                 delay: nil,
                 status: .onTime
             ),
-        ]
+        ].map { train in
+            let scenario = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--service-scenario=") }?.split(separator: "=").last.map(String.init)
+            guard scenario == "all" || scenario == "unavailable" || train.trainNo == "125" else { return train }
+            let suspension: String?
+            switch scenario {
+            case "cancelled", "all": suspension = "full"
+            case "endpoint": suspension = "destination-stop"
+            case "partial": suspension = "partial"
+            case "unknown", "unavailable": suspension = "unknown"
+            default: suspension = nil
+            }
+            return TrainInfo(
+                trainNo: train.trainNo, trainType: train.trainType, direction: train.direction,
+                originStation: train.originStation, destinationStation: train.destinationStation,
+                departureTime: train.departureTime, arrivalTime: train.arrivalTime,
+                tripLine: train.tripLine, price: train.price, delay: train.delay,
+                status: suspension == "full" || suspension == "destination-stop" ? .cancelled : suspension != nil ? .unknown : train.status,
+                suspension: suspension,
+                suspendedStations: scenario == "partial" ? ["板橋"] : scenario == "endpoint" ? ["新竹"] : []
+            )
+        }
     }
 
     private static func trainType(for index: Int) -> String {
