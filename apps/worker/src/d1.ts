@@ -80,14 +80,26 @@ export async function getSnapshot<T>(
     return toSnapshot(row, JSON.parse(row.data) as T);
 }
 
+export async function getSnapshotFetchedAt(
+    env: Env,
+    key: string
+): Promise<string | null> {
+    const row = await env.DB.prepare(
+        'select fetched_at from tdx_snapshots where key = ?'
+    )
+        .bind(key)
+        .first<{ fetched_at: string }>();
+    return row?.fetched_at ?? null;
+}
+
 export async function upsertSnapshot<T>(
     env: Env,
     key: string,
     data: T,
-    lastModified: string | null
+    lastModified: string | null,
+    fetchedAt = new Date().toISOString()
 ) {
     const serialized = JSON.stringify(data);
-    const fetchedAt = new Date().toISOString();
     const baseStatement = env.DB.prepare(
         `
             insert into tdx_snapshots (

@@ -38,8 +38,9 @@ export interface TDXStation {
 export interface TDXStopTime {
     StationID: string;
     StationName: { Zh_tw: string };
-    DepartureTime: string;
-    ArrivalTime: string;
+    DepartureTime: string | null;
+    ArrivalTime: string | null;
+    SuspendedFlag?: number;
 }
 
 export interface TDXFullTimetable {
@@ -49,8 +50,10 @@ export interface TDXFullTimetable {
         TrainTypeCode?: string;
         Direction: number;
         TripLine?: number;
+        SuspendedFlag?: number;
     };
     StopTimes: TDXStopTime[];
+    SuspendedStationNames?: string[];
 }
 
 export interface TDXTimetableResponse {
@@ -85,6 +88,14 @@ export interface TrainInfo {
     price: number | null;
     delay: number;
     status: 'on-time' | 'delayed' | 'cancelled' | 'unknown';
+    suspension:
+        | 'full'
+        | 'origin-stop'
+        | 'destination-stop'
+        | 'partial'
+        | 'unknown'
+        | null;
+    suspendedStations: string[];
 }
 
 export interface Snapshot<T> {
