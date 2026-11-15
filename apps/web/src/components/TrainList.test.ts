@@ -120,44 +120,68 @@ describe('suspended train selection', () => {
         suspension: 'full' as const,
     };
     const running = train('126', '09:54', '11:10');
-    test('retains the recently cancelled row while recommending a different train', () => {
+    test('hides cancelled trains and recommends the next boardable train', () => {
         const state = buildDisplayState(
             [cancelled, running],
             '09:41',
             'departure'
         );
         expect(state.displayTrains.map((train) => train.trainNo)).toEqual([
-            '125',
             '126',
         ]);
         expect(state.recommendedTrain?.trainNo).toBe('126');
     });
-    test('all cancelled clears recommendation in every time mode', () => {
-        for (const mode of ['departure', 'arrival', 'lastTrain'] as const)
-            expect(
-                buildDisplayState([cancelled], '09:41', mode).recommendedTrain
-            ).toBeNull();
+    test('all unavailable leaves an empty list and no recommendation in every mode', () => {
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
+            const state = buildDisplayState([cancelled], '09:41', mode);
+            expect(state.displayTrains).toEqual([]);
+            expect(state.recommendedTrain).toBeNull();
+        }
     });
-    test('an available fourth train is not hidden behind three cancelled rows', () => {
-        const rows = [
-            cancelled,
-            { ...cancelled, trainNo: '124', departureTime: '09:40' },
-            { ...cancelled, trainNo: '123', departureTime: '09:42' },
+    test('filters unavailable journeys before filling the three-row window in every mode', () => {
+        const usable = [
             running,
+            train('127', '10:10', '11:20'),
+            train('128', '10:20', '11:30'),
         ];
-        const state = buildDisplayState(rows, '09:41', 'departure');
-        expect(state.recommendedTrain?.trainNo).toBe('126');
-        expect(state.displayTrains).toHaveLength(3);
-        expect(state.displayTrains).toContain(running);
-    });
-    test('partial and unknown service are inspectable but not recommended', () => {
-        for (const suspension of ['partial', 'unknown'] as const) {
+        const rows: TrainInfo[] = [
+            cancelled,
+            {
+                ...cancelled,
+                trainNo: '124',
+                status: 'unknown',
+                suspension: 'partial',
+            },
+            {
+                ...cancelled,
+                trainNo: '123',
+                status: 'unknown',
+                suspension: 'unknown',
+            },
+            { ...cancelled, trainNo: '122', suspension: 'destination-stop' },
+            { ...running, trainNo: '121', departureTime: '--:--' },
+            ...usable,
+        ];
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
             const state = buildDisplayState(
-                [{ ...cancelled, status: 'unknown', suspension }, running],
-                '09:41',
-                'departure'
+                rows,
+                mode === 'arrival' ? '12:00' : '09:41',
+                mode
             );
-            expect(state.recommendedTrain?.trainNo).toBe('126');
+            expect(state.displayTrains).toEqual(usable);
+            expect(state.recommendedTrain?.trainNo).toBe(
+                mode === 'arrival' ? '128' : '126'
+            );
         }
     });
     test('restoring a cancelled train makes it eligible again', () => {

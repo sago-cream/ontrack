@@ -144,24 +144,28 @@ function render() {
     notice.hidden = !proposed || alerts.length === 0;
     notice.innerHTML = `${icon('alert')}<span>${text('此路線有營運異動', 'Service change on this route')}</span>${icon('chevron')}`;
     notice.onclick = () => showDetail(null);
-    $('trains').innerHTML = rows
-        .map((row, i) => {
-            const state = states[i];
-            const blocked = proposed && (!state.recommend || alerts.length > 0);
-            const serviceStateVisible = proposed && state.kind !== 'normal';
-            const delayed = row.delay > 0 && !serviceStateVisible;
-            const clock = (time: string) =>
-                `<span class="clock">${delayed ? `<small>${adjusted(time, row.delay)}</small>` : ''}${time}</span>`;
-            const side = serviceStateVisible
-                ? `<span class="service-badge">${statusLabel(state)}${icon('chevron')}</span>`
-                : `NT$${row.price}`;
-            const label = `${english ? row.typeEn : row.type} ${row.no}, ${row.departure}–${row.arrival}${serviceStateVisible ? `, ${statusLabel(state)}, ${text('查看詳情', 'view details')}` : blocked ? `, ${text('查看營運公告', 'view service advisory')}` : ''}`;
-            return `<button type="button" class="train ${proposed ? state.kind : ''}" data-index="${i}" aria-label="${escape(label)}" ${blocked ? 'aria-haspopup="dialog"' : `aria-pressed="${selected === row.no}"`}>
+    $('trains').innerHTML =
+        rows
+            .map((row, i) => {
+                const state = states[i];
+                if (proposed && !state.recommend) return '';
+                const blocked =
+                    proposed && (!state.recommend || alerts.length > 0);
+                const serviceStateVisible = proposed && state.kind !== 'normal';
+                const delayed = row.delay > 0 && !serviceStateVisible;
+                const clock = (time: string) =>
+                    `<span class="clock">${delayed ? `<small>${adjusted(time, row.delay)}</small>` : ''}${time}</span>`;
+                const side = serviceStateVisible
+                    ? `<span class="service-badge">${statusLabel(state)}${icon('chevron')}</span>`
+                    : `NT$${row.price}`;
+                const label = `${english ? row.typeEn : row.type} ${row.no}, ${row.departure}–${row.arrival}${serviceStateVisible ? `, ${statusLabel(state)}, ${text('查看詳情', 'view details')}` : blocked ? `, ${text('查看營運公告', 'view service advisory')}` : ''}`;
+                return `<button type="button" class="train ${proposed ? state.kind : ''}" data-index="${i}" aria-label="${escape(label)}" ${blocked ? 'aria-haspopup="dialog"' : `aria-pressed="${selected === row.no}"`}>
             <span class="train-times">${clock(row.departure)}<span class="duration">${i === 2 ? '1h18m' : '1h16m'}</span>${clock(row.arrival)}</span>
             <span class="train-side">${side}</span><span class="train-id"><span class="${row.type === '自強' ? 'express' : ''}">${english ? row.typeEn : row.type}</span> ${row.no}</span><span class="train-line">${english ? row.lineEn : row.line}</span>
         </button>`;
-        })
-        .join('');
+            })
+            .join('') ||
+        `<p class="empty">${text('查無可搭乘班次', 'No trains available')}</p>`;
     $('trains')
         .querySelectorAll<HTMLButtonElement>('button')
         .forEach((button) => {

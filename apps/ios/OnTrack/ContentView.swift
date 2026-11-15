@@ -318,7 +318,6 @@ struct ContentView: View {
                                 trains: trains,
                                 isLoading: isLoadingSchedule,
                                 canLoadSchedule: canLoadSchedule,
-                                snapshotFetchedAt: widgetScheduleMeta?.scheduleSnapshotFetchedAt,
                                 onSelect: selectTrain
                             )
                             .padding(.bottom, trainPanelBottomInset)
@@ -1544,8 +1543,6 @@ private struct TrainListView: View {
     let isLoading: Bool
     let canLoadSchedule: Bool
     var usePlainEmptyState = false
-    var snapshotFetchedAt: String? = nil
-    @State private var serviceTrainID: String?
     let onSelect: (TrainInfo) -> Void
     @State private var selectionFeedbackTrigger = 0
 
@@ -1569,20 +1566,13 @@ private struct TrainListView: View {
                             isSelected: selectedTrain?.trainNo == train.trainNo
                         ) {
                             selectionFeedbackTrigger += 1
-                            if train.canBoard { onSelect(train) }
-                            else { serviceTrainID = train.id }
+                            onSelect(train)
                         }
                     }
                 }
             }
         }
         .sensoryFeedback(.selection, trigger: selectionFeedbackTrigger)
-        .sheet(item: Binding<TrainInfo?>(
-            get: { trains.first { $0.id == serviceTrainID && !$0.canBoard } },
-            set: { serviceTrainID = $0?.id }
-        )) { train in
-            TrainServiceDetails(train: train, fetchedAt: snapshotFetchedAt)
-        }
     }
 
     @ViewBuilder
@@ -1601,7 +1591,7 @@ private struct TrainCard: View {
     let onSelect: () -> Void
 
     private var isDelayed: Bool {
-        train.canBoard && (train.delay ?? 0) > 0
+        (train.delay ?? 0) > 0
     }
 
     var body: some View {
@@ -1612,10 +1602,9 @@ private struct TrainCard: View {
 
                     Spacer(minLength: OnTrackTheme.space2)
 
-                    Text(train.canBoard ? (TrainDisplay.price(train.price) ?? "") : "\(train.serviceLabel) ›")
+                    Text(TrainDisplay.price(train.price) ?? "")
                         .font(OnTrackFont.caption)
-                        .foregroundStyle(train.canBoard ? OnTrackTheme.dimText : train.status == .cancelled ? OnTrackTheme.danger : OnTrackTheme.warning)
-                        .fontWeight(train.canBoard ? .regular : .semibold)
+                        .foregroundStyle(OnTrackTheme.dimText)
                         .monospacedDigit()
                         .lineLimit(1)
                         .frame(
@@ -1658,7 +1647,6 @@ private struct TrainCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityHint(train.canBoard ? "" : AppText.serviceDetails)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
@@ -1669,7 +1657,6 @@ private struct TrainCard: View {
                 adjustedTime: isDelayed ? TrainDisplay.adjustedTime(train.departureTime, delay: train.delay) : nil,
                 alignment: .leading
             )
-            .strikethrough(train.status == .cancelled, color: OnTrackTheme.dimText)
 
             TripSeparator(
                 duration: TrainDisplay.tripDuration(
@@ -1683,7 +1670,6 @@ private struct TrainCard: View {
                 adjustedTime: isDelayed ? TrainDisplay.adjustedTime(train.arrivalTime, delay: train.delay) : nil,
                 alignment: .trailing
             )
-            .strikethrough(train.status == .cancelled, color: OnTrackTheme.dimText)
         }
     }
 
@@ -1709,10 +1695,7 @@ private struct TrainCard: View {
     }
 
     private var accessibilityLabel: String {
-        if !train.canBoard {
-            return "\(TrainDisplay.trainType(train.trainType)) \(train.trainNo), \(train.departureTime)–\(train.arrivalTime), \(train.serviceLabel)"
-        }
-        return AppText.trainAccessibilityLabel(
+        AppText.trainAccessibilityLabel(
             type: TrainDisplay.trainType(train.trainType),
             number: train.trainNo,
             departure: train.departureTime,
@@ -1723,46 +1706,6 @@ private struct TrainCard: View {
             delay: train.delay,
             isSelected: isSelected
         )
-    }
-}
-
-private struct TrainServiceDetails: View {
-    @Environment(\.dismiss) private var dismiss
-    let train: TrainInfo
-    let fetchedAt: String?
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: OnTrackTheme.space4) {
-                    Text(train.serviceDescription)
-                    if let stations = train.suspendedStations, !stations.isEmpty {
-                        Text(AppText.suspendedStops(stations))
-                    }
-                    VStack(alignment: .leading, spacing: OnTrackTheme.space1) {
-                        Text(AppText.serviceSource)
-                        if let fetchedAt = TrainDisplay.snapshotTime(fetchedAt) {
-                            Text(AppText.serviceSnapshot(fetchedAt) + " (UTC+8)")
-                        }
-                    }
-                    .font(OnTrackFont.caption)
-                    .foregroundStyle(OnTrackTheme.dimText)
-                    Link(AppText.officialNotices + " ↗", destination: URL(string: "https://www.railway.gov.tw/tra-tip-web/tip/tip007/tip711/blockList")!)
-                        .frame(minHeight: OnTrackTheme.controlHeight)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(OnTrackTheme.space5)
-            }
-            .navigationTitle("\(train.trainNo) · \(AppText.serviceDetails)")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(AppText.done) { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
     }
 }
 
@@ -2091,7 +2034,6 @@ private struct TrainBoardingPanel: View {
     let trains: [TrainInfo]
     let isLoading: Bool
     let canLoadSchedule: Bool
-    var snapshotFetchedAt: String? = nil
     let onSelect: (TrainInfo) -> Void
 
     var body: some View {
@@ -2128,8 +2070,7 @@ private struct TrainBoardingPanel: View {
                 selectedTrain: selectedTrain,
                 isLoading: isLoading,
                 canLoadSchedule: canLoadSchedule,
-                usePlainEmptyState: true,
-                snapshotFetchedAt: snapshotFetchedAt
+                usePlainEmptyState: true
             ) { train in
                 onSelect(train)
             }
@@ -3696,10 +3637,6 @@ private enum OnTrackTheme {
         )
     }
 
-    static var warning: Color {
-        adaptiveColor(light: UIColor(red: 146 / 255, green: 64 / 255, blue: 14 / 255, alpha: 1),
-                      dark: UIColor(red: 252 / 255, green: 211 / 255, blue: 77 / 255, alpha: 1))
-    }
     static let danger = Color(red: 239 / 255, green: 68 / 255, blue: 68 / 255)
     static let success = Color(red: 34 / 255, green: 197 / 255, blue: 94 / 255)
 

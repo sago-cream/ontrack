@@ -218,22 +218,7 @@ export const translations = {
         'time.hour': '小時',
         'time.minute': '分鐘',
         'train.onTime': '準點',
-        'train.cancelled': '停駛',
-        'train.partial': '部分停駛',
-        'train.unverified': '待確認',
         'train.liveUnknown': '即時狀態未知',
-        'train.serviceDetails': '行駛資訊',
-        'train.cancelledDescription': '此車次全程停駛，請選擇其他列車。',
-        'train.partialDescription':
-            '此車次部分停駛，目前資料不足以確認可全程搭乘，請先向臺鐵確認。',
-        'train.unverifiedDescription':
-            '目前無法確認此車次的行駛狀況，請先向臺鐵確認。',
-        'train.stopSuspendedDescription':
-            '此車次在您的出發站或抵達站停駛，無法完成所選行程。',
-        'train.suspendedStops': '停駛車站：{stations}',
-        'train.timetableSource': '來源：TDX 臺鐵時刻表',
-        'train.snapshotAt': '資料擷取時間：{time}',
-        'train.officialNotices': '查看臺鐵營運公告',
         'train.delayMinutes': '+{minutes} min',
         'train.delayedBy': '誤點 {minutes} 分鐘',
         'train.selected': '已選取',
@@ -495,23 +480,7 @@ export const translations = {
         'time.hour': 'Hour',
         'time.minute': 'Minute',
         'train.onTime': 'On Time',
-        'train.cancelled': 'Cancelled',
-        'train.partial': 'Partial',
-        'train.unverified': 'Unverified',
         'train.liveUnknown': 'Live status unknown',
-        'train.serviceDetails': 'Service details',
-        'train.cancelledDescription':
-            'This train is cancelled throughout its journey. Choose another train.',
-        'train.partialDescription':
-            'This train is partly suspended. A through journey cannot be confirmed. Verify with TRA before travelling.',
-        'train.unverifiedDescription':
-            'Service availability for this train cannot be confirmed. Verify with TRA before travelling.',
-        'train.stopSuspendedDescription':
-            'This train does not serve your departure or arrival station. It cannot complete the selected journey.',
-        'train.suspendedStops': 'Suspended stops: {stations}',
-        'train.timetableSource': 'Source: TDX TRA timetable',
-        'train.snapshotAt': 'Snapshot fetched: {time}',
-        'train.officialNotices': 'Open TRA service notices',
         'train.delayMinutes': '+{minutes} min',
         'train.delayedBy': 'Delayed {minutes} minutes',
         'train.selected': 'Selected',

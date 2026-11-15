@@ -2,7 +2,7 @@
     "verifiedAt": "2026-11-15",
     "source": "https://tdx.transportdata.tw/webapi/File/Swagger/V3/5fa88b0c-120b-43f1-b188-c379ddb2593d",
     "baseRevision": "6a6a4705e2f24b0277c3757f304c10e880ced558",
-    "scope": "Interactive policy prototype plus initial Worker flag mapping, real web and native iOS suspension states and eligibility guards.",
+    "scope": "Timetable service eligibility on web and native iOS, with an isolated research prototype and fetch probe.",
     "run": {
         "build": "bun prototypes/train-service/build.ts",
         "test": "bun test prototypes/train-service/service.test.ts",
@@ -147,12 +147,12 @@
         {
             "file": "apps/web/src/components/TrainList.tsx",
             "function": "buildDisplayState / TrainList",
-            "finding": "Recommendations and row labels need service eligibility independent of delay sorting."
+            "finding": "Filter boardable journeys before sorting, choosing the visible window and recommending a train."
         },
         {
             "file": "apps/ios/OnTrack/ContentView.swift",
             "function": "TrainCard / selectTrain",
-            "finding": "Display suspension inline and guard selection, share and persisted widget projection."
+            "finding": "Show only boardable journeys; guard selection, sharing and persisted widget projection."
         },
         {
             "file": "apps/ios/OnTrackWidget/WidgetTimelineLoader.swift",
@@ -174,13 +174,13 @@
         "isProviderGuarantee": false,
         "partial": "Block automatic recommendation; open endpoints alone cannot confirm a through journey.",
         "alert": "Candidate route advisory; block auto recommendation in this prototype pending human verification. Do not relabel as cancelled.",
-        "stale": "Keep last reported cancellation in details; row says recheck.",
+        "stale": "Hide the train until a fresh service snapshot confirms eligibility.",
         "share": "Preview only; no real outbound sharing."
     },
     "implemented": [
         "TDX train/stop suspension flags projected independently from live delays",
         "Suspended stop names retained through OD slicing; derived routes rebuilt after daily source changes with source fetch age preserved",
-        "Web and native iOS row labels, service details and next-available selection",
+        "Web and native iOS lists show only boardable journeys, with next-available selection and the existing empty state",
         "Arrival sharing and widget guards for cancelled, unresolved partial and unknown service",
         "Debug-only matched showcase scenarios for both clients"
     ],

@@ -65,13 +65,24 @@ enum WidgetSnapshotProjectionTests {
         partial.suspension = "partial"
         let cancelled = train(number: "125", departure: "09:38", arrival: "10:54", delay: 4, status: .cancelled)
         let running = train(number: "126", departure: "09:54", arrival: "11:10", delay: 0, status: .onTime)
-        for mode in [TimeMode.departure, .arrival, .lastTrain] {
+        for mode in [TimeMode.now, .departure, .arrival, .lastTrain] {
             let display = TrainDisplay.displaySchedule(trains: [cancelled, partial], targetTime: "09:41", timeMode: mode)
+            expect(display.trains.isEmpty, "unavailable trains must not be displayed in any time mode")
             expect(display.recommendedTrain == nil, "unavailable trains must not be recommended in any time mode")
         }
         let display = TrainDisplay.displaySchedule(trains: [cancelled, running], targetTime: "09:41", timeMode: .departure)
-        expect(display.trains.first?.trainNo == "125", "recently cancelled row remains inspectable")
+        expect(display.trains.map(\.trainNo) == ["126"], "only boardable trains are visible")
         expect(display.recommendedTrain?.trainNo == "126", "choose the next boardable train")
+        let next = train(number: "127", departure: "10:10", arrival: "11:20", delay: 0, status: .onTime)
+        let last = train(number: "128", departure: "10:20", arrival: "11:30", delay: 0, status: .onTime)
+        var unknown = partial
+        unknown.suspension = "unknown"
+        let withdrawn = train(number: "129", departure: "--:--", arrival: "11:50", delay: 0, status: .onTime)
+        for mode in [TimeMode.now, .departure, .arrival, .lastTrain] {
+            let display = TrainDisplay.displaySchedule(trains: [cancelled, partial, unknown, withdrawn, running, next, last], targetTime: mode == .arrival ? "12:00" : "09:41", timeMode: mode)
+            expect(display.trains.map(\.trainNo) == ["126", "127", "128"], "filter before filling the three-row window in every mode")
+            expect(display.recommendedTrain?.trainNo == (mode == .arrival ? "128" : "126"), "recommend only a displayed boardable train")
+        }
         expect(project(source: .selected(primary: partial, cards: [partial]), projectedAt: fetchedAt) == nil, "selected partial train cannot create a shareable widget")
         expect(project(source: .selected(primary: cancelled, cards: [cancelled]), projectedAt: fetchedAt) == nil, "selected cancellation cannot create a shareable widget")
         let snapshot = project(source: .selected(primary: running, cards: [cancelled, partial, running]), projectedAt: fetchedAt)

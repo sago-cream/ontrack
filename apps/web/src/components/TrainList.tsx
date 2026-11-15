@@ -12,7 +12,6 @@ import { canBoardTrain, supportsElectronicTicket } from '../trainEligibility';
 import type { TrainInfo } from '../types';
 import type { TimeMode } from './TimeSelector';
 import { TrainListSkeleton } from './TrainListSkeleton';
-import { TrainServiceDetails } from './TrainServiceDetails';
 
 import './TrainList.css';
 
@@ -121,29 +120,9 @@ export function buildDisplayState(
         timeMode === 'arrival'
             ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
             : getEffectiveDepartureMinutes;
-    const orderedTrains = [...trains].sort(
-        (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
-    );
-
-    function result(
-        window: TrainInfo[],
-        candidates: TrainInfo[],
-        preferLast = false
-    ) {
-        const available = window.filter(canBoardTrain);
-        let recommendedTrain =
-            (preferLast ? available.at(-1) : available[0]) ?? null;
-        let displayTrains = window;
-        if (!recommendedTrain) {
-            const usable = candidates.filter(canBoardTrain);
-            recommendedTrain = (preferLast ? usable.at(-1) : usable[0]) ?? null;
-            if (recommendedTrain)
-                displayTrains = [...window.slice(0, 2), recommendedTrain].sort(
-                    (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
-                );
-        }
-        return { displayTrains, recommendedTrain };
-    }
+    const orderedTrains = trains
+        .filter(canBoardTrain)
+        .sort((a, b) => getComparisonMinutes(a) - getComparisonMinutes(b));
 
     if (timeMode === 'arrival') {
         const firstLateArrivalIndex = orderedTrains.findIndex(
@@ -156,7 +135,10 @@ export function buildDisplayState(
         if (latestArrivalIndex === -1) {
             const displayTrains = orderedTrains.slice(0, 3);
 
-            return result(displayTrains, orderedTrains);
+            return {
+                displayTrains,
+                recommendedTrain: displayTrains[0] ?? null,
+            };
         }
 
         const start = Math.max(0, latestArrivalIndex - 2);
@@ -165,38 +147,30 @@ export function buildDisplayState(
             latestArrivalIndex + 1
         );
 
-        return result(
+        return {
             displayTrains,
-            orderedTrains.slice(0, latestArrivalIndex + 1),
-            true
-        );
+            recommendedTrain: displayTrains[displayTrains.length - 1] ?? null,
+        };
     }
     const nextCatchableTrainIndex = orderedTrains.findIndex(
-        (train) =>
-            getEffectiveDepartureMinutes(train) >= targetTimeMinutes ||
-            (timeMode !== 'lastTrain' &&
-                !canBoardTrain(train) &&
-                getEffectiveDepartureMinutes(train) >= targetTimeMinutes - 15)
+        (train) => getEffectiveDepartureMinutes(train) >= targetTimeMinutes
     );
 
     let displayTrains: TrainInfo[] = [];
+    let recommendedTrain: TrainInfo | null = null;
 
     if (nextCatchableTrainIndex === -1) {
         displayTrains = orderedTrains.slice(-3);
+        recommendedTrain = displayTrains[displayTrains.length - 1] ?? null;
     } else {
         displayTrains = orderedTrains.slice(
             nextCatchableTrainIndex,
             nextCatchableTrainIndex + 3
         );
+        recommendedTrain = displayTrains[0] ?? null;
     }
 
-    return result(
-        displayTrains,
-        nextCatchableTrainIndex === -1
-            ? orderedTrains
-            : orderedTrains.slice(nextCatchableTrainIndex),
-        nextCatchableTrainIndex === -1
-    );
+    return { displayTrains, recommendedTrain };
 }
 
 interface TrainListProps {
@@ -235,10 +209,6 @@ export function TrainList({
     showHeading = true,
 }: TrainListProps) {
     const { t, language } = useI18n();
-    const [serviceTrainNo, setServiceTrainNo] = useState<string | null>(null);
-    const [snapshotFetchedAt, setSnapshotFetchedAt] = useState<string | null>(
-        null
-    );
     const [allTrains, setAllTrains] = useState<TrainInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -300,9 +270,6 @@ export function TrainList({
                     );
                     selectionRef.current.onSelect(currentSelection ?? null);
                     setAllTrains(res.trains);
-                    setSnapshotFetchedAt(
-                        res.meta?.scheduleSnapshotFetchedAt ?? null
-                    );
                     lastFetchTimeRef.current = Date.now();
 
                     if (res.meta?.scheduleCacheStatus === 'warming') {
@@ -427,9 +394,6 @@ export function TrainList({
         error,
     ]);
 
-    const serviceTrain = allTrains.find(
-        (train) => train.trainNo === serviceTrainNo && !canBoardTrain(train)
-    );
     if (!originId || !destId) return null;
 
     return (
@@ -459,15 +423,7 @@ export function TrainList({
                         const trainData = train as TrainInfo;
                         const isSelected =
                             trainData.trainNo === selectedTrainNo;
-                        const unavailable = !canBoardTrain(trainData);
-                        const serviceLabel =
-                            trainData.status === 'cancelled'
-                                ? t('train.cancelled')
-                                : trainData.suspension === 'partial'
-                                  ? t('train.partial')
-                                  : t('train.unverified');
-                        const isDelayed =
-                            !unavailable && (trainData.delay ?? 0) > 0;
+                        const isDelayed = (trainData.delay ?? 0) > 0;
                         const tripMin = getTripMinutes(
                             trainData.departureTime,
                             trainData.arrivalTime
@@ -505,11 +461,9 @@ export function TrainList({
                             t('train.duration', {
                                 duration: formatDuration(tripMin),
                             }),
-                            !unavailable && price
-                                ? t('train.fare', { price })
-                                : '',
+                            price ? t('train.fare', { price }) : '',
                             tripLine ?? '',
-                            unavailable ? serviceLabel : delayStatus,
+                            delayStatus,
                         ]
                             .filter(Boolean)
                             .join(language === 'en' ? ', ' : '，');
@@ -518,19 +472,12 @@ export function TrainList({
                             <button
                                 key={trainData.trainNo}
                                 type='button'
-                                className={`card-panel clickable-item train-card ${isSelected && !unavailable ? 'selected' : ''} ${unavailable ? 'train-card-unavailable' : ''} ${trainData.status === 'cancelled' ? 'train-card-cancelled' : ''}`}
+                                className={`card-panel clickable-item train-card ${isSelected ? 'selected' : ''}`}
                                 onClick={() => {
                                     selectionFeedback();
-                                    if (unavailable)
-                                        setServiceTrainNo(trainData.trainNo);
-                                    else onSelect(trainData);
+                                    onSelect(trainData);
                                 }}
-                                aria-pressed={
-                                    unavailable ? undefined : isSelected
-                                }
-                                aria-haspopup={
-                                    unavailable ? 'dialog' : undefined
-                                }
+                                aria-pressed={isSelected}
                                 aria-label={trainLabel}
                             >
                                 <div className='train-card-times'>
@@ -588,10 +535,8 @@ export function TrainList({
                                         </span>
                                     </span>
                                 </div>
-                                <span
-                                    className={`train-card-price ${unavailable ? 'train-card-service' : ''} ${trainData.status === 'cancelled' ? 'is-cancelled' : ''}`}
-                                >
-                                    {unavailable ? `${serviceLabel} ›` : price}
+                                <span className='train-card-price'>
+                                    {price}
                                 </span>
                                 <div className='train-card-info'>
                                     <span className='train-card-identifier'>
@@ -610,13 +555,6 @@ export function TrainList({
                         );
                     })}
                 </div>
-            )}
-            {serviceTrain && (
-                <TrainServiceDetails
-                    train={serviceTrain}
-                    fetchedAt={snapshotFetchedAt}
-                    onClose={() => setServiceTrainNo(null)}
-                />
             )}
         </section>
     );
