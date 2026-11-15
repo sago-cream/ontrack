@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { supportsElectronicTicket } from './trainEligibility';
+import { canBoardTrain, supportsElectronicTicket } from './trainEligibility';
 import type { TrainInfo } from './types';
 
 function train(trainType: string): TrainInfo {
@@ -36,4 +36,30 @@ describe('electronic ticket train eligibility', () => {
     ])('excludes %s trains', (trainType) => {
         expect(supportsElectronicTicket(train(trainType))).toBe(false);
     });
+});
+
+test('only confirmed journey cancellations or unusable times exclude boarding', () => {
+    for (const suspension of [
+        'full',
+        'origin-stop',
+        'destination-stop',
+    ] as const)
+        expect(canBoardTrain({ ...train('區間'), suspension })).toBe(false);
+    expect(canBoardTrain({ ...train('區間'), status: 'cancelled' })).toBe(
+        false
+    );
+    expect(canBoardTrain({ ...train('區間'), departureTime: '--:--' })).toBe(
+        false
+    );
+    expect(canBoardTrain({ ...train('區間'), arrivalTime: '--:--' })).toBe(
+        false
+    );
+});
+
+test('missing live data and unconfirmed service flags keep scheduled trains visible', () => {
+    for (const suspension of [undefined, null, 'unknown', 'partial'] as const) {
+        expect(
+            canBoardTrain({ ...train('區間'), status: 'unknown', suspension })
+        ).toBe(true);
+    }
 });

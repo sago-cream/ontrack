@@ -100,6 +100,18 @@ struct TrainInfo: Decodable, Identifiable {
     let price: Int?
     let delay: Int?
     let status: TrainStatus
+    var suspension: String? = nil
+    var suspendedStations: [String]? = nil
+
+    var canBoard: Bool {
+        status != .cancelled && !["full", "origin-stop", "destination-stop"].contains(suspension ?? "") &&
+            Self.isClock(departureTime) && Self.isClock(arrivalTime)
+    }
+
+    private static func isClock(_ value: String) -> Bool {
+        let parts = value.split(separator: ":").compactMap { Int($0) }
+        return value.count == 5 && value.dropFirst(2).first == ":" && parts.count == 2 && (0...23).contains(parts[0]) && (0...59).contains(parts[1])
+    }
 
     var id: String { trainNo }
 
@@ -284,6 +296,7 @@ enum TrainDisplay {
     }
 
     static func tripDuration(departure: String, arrival: String) -> String {
+        guard departure != "--:--", arrival != "--:--" else { return "—" }
         let minutes = tripMinutes(departure: departure, arrival: arrival)
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
@@ -305,7 +318,7 @@ enum TrainDisplay {
                 timeToMinutes(train.arrivalTime)
             }
         }
-        let orderedTrains = trains.enumerated()
+        let orderedTrains = trains.filter(\.canBoard).enumerated()
             .sorted { lhs, rhs in
                 let lhsMinutes = comparisonMinutes(lhs.element)
                 let rhsMinutes = comparisonMinutes(rhs.element)
@@ -368,7 +381,7 @@ enum TrainDisplay {
     private static func timeToMinutes(_ time: String) -> Int {
         let parts = time.split(separator: ":").compactMap { Int($0) }
         guard parts.count == 2 else {
-            return 0
+            return 24 * 60
         }
 
         return parts[0] * 60 + parts[1]

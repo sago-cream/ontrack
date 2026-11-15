@@ -8,7 +8,7 @@ import {
     selectionFeedback,
     type AppearanceMode,
 } from '../native/platform';
-import { supportsElectronicTicket } from '../trainEligibility';
+import { canBoardTrain, supportsElectronicTicket } from '../trainEligibility';
 import type { TrainInfo } from '../types';
 import type { TimeMode } from './TimeSelector';
 import { TrainListSkeleton } from './TrainListSkeleton';
@@ -78,15 +78,19 @@ export function addMinutes(time: string, minutes: number): string {
 
 function timeToMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
-    return h * 60 + m;
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : 24 * 60;
 }
 
 function getEffectiveDepartureMinutes(train: TrainInfo): number {
-    return timeToMinutes(train.departureTime) + (train.delay ?? 0);
+    return (
+        timeToMinutes(train.departureTime) +
+        (canBoardTrain(train) ? (train.delay ?? 0) : 0)
+    );
 }
 
 /** Calculate trip duration in minutes between two HH:mm strings */
 function getTripMinutes(departure: string, arrival: string): number {
+    if (departure === '--:--' || arrival === '--:--') return NaN;
     const [dh, dm] = departure.split(':').map(Number);
     const [ah, am] = arrival.split(':').map(Number);
     let diff = ah * 60 + am - (dh * 60 + dm);
@@ -95,6 +99,7 @@ function getTripMinutes(departure: string, arrival: string): number {
 }
 
 function formatDuration(minutes: number): string {
+    if (!Number.isFinite(minutes)) return '—';
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     if (h === 0) return `${m}m`;
@@ -115,9 +120,9 @@ export function buildDisplayState(
         timeMode === 'arrival'
             ? (train: TrainInfo) => timeToMinutes(train.arrivalTime)
             : getEffectiveDepartureMinutes;
-    const orderedTrains = [...trains].sort(
-        (a, b) => getComparisonMinutes(a) - getComparisonMinutes(b)
-    );
+    const orderedTrains = trains
+        .filter(canBoardTrain)
+        .sort((a, b) => getComparisonMinutes(a) - getComparisonMinutes(b));
 
     if (timeMode === 'arrival') {
         const firstLateArrivalIndex = orderedTrains.findIndex(
@@ -179,7 +184,7 @@ interface TrainListProps {
     time: string;
     timeMode: TimeMode;
     electronicTicketOnly: boolean;
-    onSelect: (train: TrainInfo) => void;
+    onSelect: (train: TrainInfo | null) => void;
     selectedTrainNo: string | null;
     refreshLiveNonce?: number;
     onRefreshingLiveChange?: (isRefreshing: boolean) => void;
@@ -257,6 +262,13 @@ export function TrainList({
                         return;
                     }
 
+                    const currentSelection = res.trains.find(
+                        (train) =>
+                            train.trainNo ===
+                                selectionRef.current.selectedTrainNo &&
+                            canBoardTrain(train)
+                    );
+                    selectionRef.current.onSelect(currentSelection ?? null);
                     setAllTrains(res.trains);
                     lastFetchTimeRef.current = Date.now();
 
@@ -344,9 +356,10 @@ export function TrainList({
         const selected =
             displayTrains.find(
                 (train) =>
-                    train.trainNo === selectionRef.current.selectedTrainNo
+                    train.trainNo === selectionRef.current.selectedTrainNo &&
+                    canBoardTrain(train)
             ) ?? recommendedTrain;
-        if (selected) selectionRef.current.onSelect(selected);
+        selectionRef.current.onSelect(selected);
     }, [displayTrains, recommendedTrain]);
 
     useEffect(() => {
@@ -362,7 +375,7 @@ export function TrainList({
                 messageTemplate: widgetMessageTemplate,
                 electronicTicketOnly,
                 language,
-                trains: allTrains,
+                trains: allTrains.filter(canBoardTrain),
                 fetchedAt: Date.now(),
             }),
         }).catch(() => {});
@@ -433,7 +446,9 @@ export function TrainList({
                             ? t('train.delayedBy', {
                                   minutes: trainData.delay ?? 0,
                               })
-                            : t('train.onTime');
+                            : trainData.status === 'unknown'
+                              ? t('train.liveUnknown')
+                              : t('train.onTime');
                         const trainLabel = [
                             isSelected ? t('train.selected') : '',
                             `${trainType} ${trainData.trainNo}`,

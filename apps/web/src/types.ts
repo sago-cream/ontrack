@@ -18,6 +18,14 @@ export interface TrainInfo {
     price?: number | null; // Adult fare in TWD
     delay?: number; // Minutes, 0 = On Time, undefined = Unknown
     status: 'on-time' | 'delayed' | 'cancelled' | 'unknown';
+    suspension?:
+        | 'full'
+        | 'origin-stop'
+        | 'destination-stop'
+        | 'partial'
+        | 'unknown'
+        | null;
+    suspendedStations?: string[];
 }
 
 export interface ScheduleResponse {

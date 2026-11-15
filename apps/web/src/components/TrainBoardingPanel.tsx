@@ -6,6 +6,7 @@ import {
     createShareMessageTemplateValues,
     renderShareMessageTemplate,
 } from '../shareMessage';
+import { canBoardTrain } from '../trainEligibility';
 import type { TrainInfo } from '../types';
 import type { TimeMode } from './TimeSelector';
 import { addMinutes, parseTrainType, TrainList } from './TrainList';
@@ -25,7 +26,7 @@ interface TrainBoardingPanelProps {
     selectedTrain: TrainInfo | null;
     electronicTicketOnly: boolean;
     messageTemplate: string;
-    onSelectTrain: (train: TrainInfo) => void;
+    onSelectTrain: (train: TrainInfo | null) => void;
     refreshLiveNonce?: number;
     onRefreshingLiveChange?: (isRefreshing: boolean) => void;
 }
@@ -54,7 +55,10 @@ export function TrainBoardingPanel({
     onRefreshingLiveChange,
 }: TrainBoardingPanelProps) {
     const { t, language } = useI18n();
-    const activeTrain = canLoadSchedule ? selectedTrain : null;
+    const activeTrain =
+        canLoadSchedule && selectedTrain && canBoardTrain(selectedTrain)
+            ? selectedTrain
+            : null;
     const adjustedArrivalTime = activeTrain
         ? getAdjustedArrivalTime(activeTrain)
         : '';

@@ -110,6 +110,12 @@ public class TrainWidget extends AppWidgetProvider {
     return true;
   }
 
+  static boolean hasConfirmedSuspension(String suspension) {
+    return "full".equals(suspension)
+        || "origin-stop".equals(suspension)
+        || "destination-stop".equals(suspension);
+  }
+
   static List<JSONObject> nextTrains(JSONObject snapshot, ZonedDateTime now) {
     List<JSONObject> result = new ArrayList<>();
     if (!snapshot.optString("date").equals(now.toLocalDate().toString())) return result;
@@ -118,6 +124,10 @@ public class TrainWidget extends AppWidgetProvider {
     for (int i = 0; i < trains.length(); i++) {
       JSONObject train = trains.optJSONObject(i);
       if (train == null
+          || "cancelled".equals(train.optString("status"))
+          || hasConfirmedSuspension(train.optString("suspension"))
+          || !train.optString("departureTime").matches("([01][0-9]|2[0-3]):[0-5][0-9]")
+          || !train.optString("arrivalTime").matches("([01][0-9]|2[0-3]):[0-5][0-9]")
           || (snapshot.optBoolean("electronicTicketOnly")
               && !eligible(train.optString("trainType")))) continue;
       if (minutes(train.optString("departureTime")) + train.optInt("delay")

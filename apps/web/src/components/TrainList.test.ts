@@ -112,3 +112,115 @@ describe('train list display selection', () => {
         expect(result.recommendedTrain?.trainNo).toBe('104');
     });
 });
+
+describe('suspended train selection', () => {
+    const cancelled = {
+        ...train('125', '09:38', '10:54', 4),
+        status: 'cancelled' as const,
+        suspension: 'full' as const,
+    };
+    const running = train('126', '09:54', '11:10');
+    test('hides cancelled trains and recommends the next boardable train', () => {
+        const state = buildDisplayState(
+            [cancelled, running],
+            '09:41',
+            'departure'
+        );
+        expect(state.displayTrains.map((train) => train.trainNo)).toEqual([
+            '126',
+        ]);
+        expect(state.recommendedTrain?.trainNo).toBe('126');
+    });
+    test('all unavailable leaves an empty list and no recommendation in every mode', () => {
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
+            const state = buildDisplayState([cancelled], '09:41', mode);
+            expect(state.displayTrains).toEqual([]);
+            expect(state.recommendedTrain).toBeNull();
+        }
+    });
+    test('filters unavailable journeys before filling the three-row window in every mode', () => {
+        const usable = [
+            running,
+            train('127', '10:10', '11:20'),
+            train('128', '10:20', '11:30'),
+        ];
+        const rows: TrainInfo[] = [
+            cancelled,
+            { ...cancelled, trainNo: '124', suspension: 'origin-stop' },
+            { ...cancelled, trainNo: '122', suspension: 'destination-stop' },
+            { ...running, trainNo: '121', departureTime: '--:--' },
+            ...usable,
+        ];
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
+            const state = buildDisplayState(
+                rows,
+                mode === 'arrival' ? '12:00' : '09:41',
+                mode
+            );
+            expect(state.displayTrains).toEqual(usable);
+            expect(state.recommendedTrain?.trainNo).toBe(
+                mode === 'arrival' ? '128' : '126'
+            );
+        }
+    });
+    test('keeps upcoming scheduled trains when live status or suspension flags are unconfirmed', () => {
+        const upcoming: TrainInfo[] = [
+            { ...train('1273', '21:50', '23:33'), status: 'unknown' },
+            {
+                ...train('157', '21:55', '23:14'),
+                status: 'unknown',
+                suspension: 'unknown',
+            },
+            {
+                ...train('1271', '22:15', '23:52'),
+                status: 'unknown',
+                suspension: 'partial',
+            },
+            { ...train('1281', '22:40', '00:16'), status: 'unknown' },
+        ];
+        const state = buildDisplayState(upcoming, '21:47', 'departure');
+        expect(state.displayTrains.map((t) => t.trainNo)).toEqual([
+            '1273',
+            '157',
+            '1271',
+        ]);
+        expect(state.recommendedTrain?.trainNo).toBe('1273');
+        for (const mode of [
+            'now',
+            'departure',
+            'arrival',
+            'lastTrain',
+        ] as const) {
+            const trains = upcoming.slice(0, 3);
+            expect(
+                buildDisplayState(
+                    trains,
+                    mode === 'arrival' ? '23:59' : '21:47',
+                    mode
+                ).displayTrains
+            ).toHaveLength(3);
+        }
+    });
+    test('restoring a cancelled train makes it eligible again', () => {
+        expect(
+            buildDisplayState(
+                [
+                    { ...cancelled, status: 'delayed', suspension: null },
+                    running,
+                ],
+                '09:41',
+                'departure'
+            ).recommendedTrain?.trainNo
+        ).toBe('125');
+    });
+});

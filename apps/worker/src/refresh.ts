@@ -1,5 +1,6 @@
 import {
     getSnapshot,
+    getSnapshotFetchedAt,
     getTopRouteInterests,
     hasAnyRecentRouteTimeInterest,
     hasRecentRelatedRouteTimeInterest,
@@ -254,6 +255,11 @@ export function filterRouteTimetables(
             routeTimetables.push({
                 ...timetable,
                 StopTimes: [originStop, destStop],
+                SuspendedStationNames:
+                    timetable.SuspendedStationNames ??
+                    stops
+                        .filter((stop) => stop.SuspendedFlag === 1)
+                        .map((stop) => stop.StationName.Zh_tw),
             });
         }
     }
@@ -498,7 +504,8 @@ async function deriveRouteFromDailySnapshot(
             env,
             routeTimetableKey(date, origin, dest),
             timetables,
-            null
+            null,
+            snapshot.fetched_at
         );
     } catch (error) {
         console.error('Failed to cache derived route timetable:', error);
@@ -517,11 +524,23 @@ export async function getCachedRouteTimetable(
     origin: string,
     dest: string
 ): Promise<CachedRouteTimetable> {
-    const routeSnapshot = await getSnapshot<TDXFullTimetable[]>(
-        env,
-        routeTimetableKey(date, origin, dest)
+    const [routeSnapshot, dailyFetchedAt] = await Promise.all([
+        getSnapshot<TDXFullTimetable[]>(
+            env,
+            routeTimetableKey(date, origin, dest)
+        ),
+        getSnapshotFetchedAt(env, timetableKey(date)),
+    ]);
+    // Rebuild derived routes when the daily source changes or stop context is absent.
+    const routeHasServiceContext = routeSnapshot?.data.every(
+        (train) => train.SuspendedStationNames !== undefined
     );
-    if (routeSnapshot) {
+    if (
+        routeSnapshot &&
+        (!dailyFetchedAt ||
+            (routeHasServiceContext &&
+                routeSnapshot.fetched_at >= dailyFetchedAt))
+    ) {
         return {
             timetables: routeSnapshot.data,
             cacheStatus: 'hit',

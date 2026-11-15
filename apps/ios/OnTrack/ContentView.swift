@@ -186,7 +186,7 @@ struct ContentView: View {
     }
 
     private var shareMessage: String? {
-        guard let selectedTrain, let destinationStation else {
+        guard let selectedTrain, selectedTrain.canBoard, let destinationStation else {
             return nil
         }
 
@@ -641,11 +641,13 @@ struct ContentView: View {
     }
 
     private func selectTrain(_ train: TrainInfo) {
+        guard train.canBoard else { return }
         selectedTrain = train
         persistWidgetSnapshot(for: train)
     }
 
     private func persistWidgetSnapshot(for train: TrainInfo) {
+        guard train.canBoard else { WidgetSnapshotStore.clear(); return }
         guard let originStation, let destinationStation else {
             return
         }

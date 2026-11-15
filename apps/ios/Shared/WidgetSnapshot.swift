@@ -138,13 +138,14 @@ struct WidgetSnapshotProjection {
 
         switch source {
         case let .selected(primary, cards):
+            guard primary.canBoard else { return nil }
             selection = (
                 sanitized(primary, liveDataIsFresh: liveDataIsFresh),
-                cards.map { sanitized($0, liveDataIsFresh: liveDataIsFresh) }
+                cards.filter(\.canBoard).map { sanitized($0, liveDataIsFresh: liveDataIsFresh) }
             )
         case let .recommended(trains, targetTime, timeMode):
             let usableTrains = trains
-                .filter { $0.status != .cancelled }
+                .filter(\.canBoard)
                 .map { sanitized($0, liveDataIsFresh: liveDataIsFresh) }
             let display = TrainDisplay.displaySchedule(
                 trains: usableTrains,
@@ -235,7 +236,9 @@ struct WidgetSnapshotProjection {
             tripLine: train.tripLine,
             price: train.price,
             delay: liveDataIsFresh ? train.delay : nil,
-            status: liveDataIsFresh ? train.status : .unknown
+            status: liveDataIsFresh ? train.status : .unknown,
+            suspension: train.suspension,
+            suspendedStations: train.suspendedStations
         )
     }
 }
@@ -308,9 +311,9 @@ enum WidgetSnapshotStore {
         UserDefaults(suiteName: suiteName)?.set(data, forKey: snapshotKey)
     }
 
-    static func clear() {
+    static func clear(reloadTimelines: Bool = true) {
         UserDefaults(suiteName: suiteName)?.removeObject(forKey: snapshotKey)
-        reloadAllTimelines()
+        if reloadTimelines { reloadAllTimelines() }
     }
 
     static func reloadAllTimelines() {

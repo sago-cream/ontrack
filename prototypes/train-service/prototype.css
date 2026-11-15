@@ -1,0 +1,489 @@
+/* Foundation values and train-card geometry follow apps/web/src/index.css and TrainList.css. */
+:root {
+    color-scheme: light;
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --muted-foreground: #475569;
+    --card: #fff;
+    --border: rgba(15, 23, 42, 0.12);
+    --primary: #357de9;
+    --accent-surface: rgba(53, 125, 233, 0.12);
+    --destructive: #dc2626;
+    --destructive-surface: rgba(220, 38, 38, 0.1);
+    --warning: #92400e;
+    --warning-surface: #fef3c7;
+    --radius: 12px;
+    --font-sans: Inter, system-ui, -apple-system, sans-serif;
+}
+:root[data-theme='dark'] {
+    color-scheme: dark;
+    --background: #0f172a;
+    --foreground: #f1f5f9;
+    --muted-foreground: #94a3b8;
+    --card: #1e293b;
+    --border: rgba(248, 250, 252, 0.1);
+    --accent-surface: rgba(53, 125, 233, 0.2);
+    --destructive: #f87171;
+    --destructive-surface: rgba(239, 68, 68, 0.16);
+    --warning: #fcd34d;
+    --warning-surface: rgba(252, 211, 77, 0.1);
+}
+* {
+    box-sizing: border-box;
+}
+html,
+body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+}
+body {
+    color: var(--foreground);
+    font: 14px/1.5 var(--font-sans);
+}
+button,
+select {
+    font: inherit;
+    color: inherit;
+}
+button,
+a,
+select {
+    -webkit-tap-highlight-color: transparent;
+}
+button {
+    border: 0;
+    cursor: pointer;
+}
+button:active:not(:disabled) {
+    transform: scale(0.97);
+}
+button:disabled {
+    cursor: default;
+}
+button,
+select,
+a {
+    touch-action: manipulation;
+}
+:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+}
+button,
+select {
+    min-height: 44px;
+}
+button,
+select,
+.time-control {
+    border-radius: 8px;
+}
+a {
+    color: var(--primary);
+    text-underline-offset: 3px;
+}
+svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: middle;
+}
+.prototype {
+    max-width: 480px;
+    margin: 0 auto;
+}
+.review-controls {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.review-controls label {
+    display: grid;
+    gap: 4px;
+}
+.review-controls label > span {
+    color: var(--muted-foreground);
+    font-size: 12px;
+}
+select {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+}
+.control-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.versions {
+    display: flex;
+    gap: 4px;
+}
+.versions button {
+    flex: 1;
+    padding: 8px;
+    color: var(--muted-foreground);
+    background: transparent;
+}
+.versions button[aria-pressed='true'] {
+    color: var(--primary);
+    background: var(--accent-surface);
+    font-weight: 600;
+}
+.simulation {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    text-align: center;
+}
+.app-surface {
+    padding: 16px;
+    background: var(--background);
+    border-radius: var(--radius);
+}
+.toolbar {
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: center;
+    color: var(--muted-foreground);
+    margin-bottom: 16px;
+    text-align: center;
+}
+.time-control {
+    justify-self: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--foreground);
+}
+.route-panel {
+    background: var(--card);
+    box-shadow: 0 0 0 1px var(--border);
+    border-radius: var(--radius);
+    padding: 0 16px;
+}
+.route-panel > div {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-height: 56px;
+    position: relative;
+}
+.route-panel > div + div::before {
+    content: '';
+    position: absolute;
+    left: 32px;
+    top: 0;
+    right: 0;
+    border-top: 1px solid var(--border);
+}
+.route-panel strong {
+    font-size: 16px;
+    font-weight: 600;
+}
+.route-origin,
+.route-destination {
+    width: 16px;
+    text-align: center;
+    color: var(--muted-foreground);
+}
+.route-destination {
+    color: var(--primary);
+    font-size: 24px;
+}
+.swap {
+    margin-left: auto;
+    color: var(--muted-foreground);
+    font-size: 28px;
+    line-height: 1;
+}
+.departure-panel {
+    margin-top: 48px;
+}
+h2 {
+    margin: 0 0 8px;
+    color: var(--muted-foreground);
+    font-size: 14px;
+    font-weight: 500;
+}
+.departure-panel > h2 {
+    padding-inline: 12px;
+}
+.trains {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.train {
+    width: 100%;
+    min-height: 76px;
+    padding: 12px 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    grid-template-rows: 24px 24px;
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+    align-content: center;
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--border);
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+}
+.train[aria-pressed='true'] {
+    background: var(--accent-surface);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 44%, transparent);
+}
+.train-times {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+.clock {
+    width: 44px;
+    flex-shrink: 0;
+    font-size: 14px;
+    font-weight: 700;
+    position: relative;
+}
+.clock small {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--destructive);
+    position: absolute;
+    bottom: 14px;
+    left: 0;
+}
+.duration {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex: 1;
+    max-width: 64px;
+    color: var(--muted-foreground);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.duration::before,
+.duration::after {
+    content: '';
+    height: 1px;
+    min-width: 4px;
+    flex: 1;
+    background: var(--border);
+}
+.train-id {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted-foreground);
+}
+.train-id .express {
+    color: var(--primary);
+}
+.train-side {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+    color: var(--muted-foreground);
+    font-size: 12px;
+}
+.train-line {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: right;
+    color: var(--muted-foreground);
+    font-size: 14px;
+}
+.train.cancelled .clock {
+    color: var(--muted-foreground);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+.service-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--destructive);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.service-badge svg {
+    width: 12px;
+    height: 12px;
+}
+.partial .service-badge,
+.unknown .service-badge {
+    color: var(--warning);
+}
+.notice {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 12px;
+    gap: 8px;
+    background: var(--warning-surface);
+    color: var(--warning);
+    text-align: left;
+    border-radius: var(--radius);
+    font-weight: 500;
+}
+.notice > span {
+    flex: 1;
+}
+[hidden] {
+    display: none !important;
+}
+.share-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 8px;
+    align-items: center;
+    min-height: 64px;
+    padding: 8px 8px 8px 20px;
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: 0 0 0 1px var(--border);
+}
+.share-panel p {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    text-wrap: pretty;
+}
+.share-panel p.empty {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--muted-foreground);
+}
+.share-panel button {
+    width: 44px;
+    background: transparent;
+    color: var(--primary);
+}
+.share-panel button:disabled {
+    color: var(--muted-foreground);
+    opacity: 0.5;
+}
+.feedback {
+    font-size: 12px;
+    color: var(--muted-foreground);
+    margin: 8px 0 0;
+    min-height: 18px;
+}
+.integration {
+    margin-top: 20px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+}
+.integration summary {
+    cursor: pointer;
+    min-height: 44px;
+}
+.integration p {
+    margin: 0 0 16px;
+}
+.integration li {
+    margin-bottom: 8px;
+}
+code {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+}
+dialog {
+    width: calc(100% - 32px);
+    max-width: 400px;
+    max-height: 88svh;
+    padding: 20px;
+    border: 0;
+    border-radius: 24px;
+    background: var(--card);
+    color: var(--foreground);
+    box-shadow: 0 16px 64px #0003;
+}
+dialog::backdrop {
+    background: #0f172a66;
+}
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.detail-header h2 {
+    flex: 1;
+    color: var(--foreground);
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+.detail-header button {
+    width: 44px;
+    background: transparent;
+    color: var(--muted-foreground);
+}
+#detail-body p {
+    margin: 0 0 16px;
+    text-wrap: pretty;
+}
+#detail-body .source {
+    font-size: 12px;
+    color: var(--muted-foreground);
+}
+#detail-body a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+}
+@media (max-width: 359px) {
+    .app-surface {
+        padding: 12px;
+    }
+    .train {
+        padding-inline: 12px;
+        grid-template-columns: minmax(0, 1fr) 84px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    button:active:not(:disabled) {
+        transform: none;
+    }
+}
+
+/* Matched evidence view omits the prototype controls and uses the app's insets. */
+:root[data-capture='true'] .prototype {
+    max-width: 520px;
+}
+:root[data-capture='true'] .review-controls,
+:root[data-capture='true'] .integration,
+:root[data-capture='true'] .feedback {
+    display: none;
+}
+:root[data-capture='true'] .app-surface {
+    display: flex;
+    flex-direction: column;
+    min-height: var(--capture-height);
+    padding: 12px 20px 32px;
+    border-radius: 0;
+}
+:root[data-capture='true'] .toolbar {
+    min-height: 44px;
+}
+:root[data-capture='true'] .time-control {
+    padding-block: 10px;
+}
+:root[data-capture='true'] .departure-panel {
+    margin-top: auto;
+    padding-top: 48px;
+}

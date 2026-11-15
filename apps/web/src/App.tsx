@@ -372,7 +372,11 @@ function App() {
             String(enabled)
         );
     };
-    const handleSelectTrain = (train: TrainInfo) => {
+    const handleSelectTrain = (train: TrainInfo | null) => {
+        if (!train) {
+            setSelectedTrainState(null);
+            return;
+        }
         setSelectedTrainState({
             scheduleKey: scheduleSelectionKey,
             train,

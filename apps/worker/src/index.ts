@@ -338,8 +338,36 @@ export function mapTrainToAppTrainInfo(
 
     const trainNo = timetable.TrainInfo.TrainNo;
     const delay = delayMap.get(trainNo);
+    const suspendedStations =
+        timetable.SuspendedStationNames ??
+        stops
+            .filter((stop) => stop.SuspendedFlag === 1)
+            .map((stop) => stop.StationName.Zh_tw);
+    const flag = timetable.TrainInfo.SuspendedFlag;
+    const suspension: TrainInfo['suspension'] =
+        flag === 1
+            ? 'full'
+            : originStop.SuspendedFlag === 1
+              ? 'origin-stop'
+              : destStop.SuspendedFlag === 1
+                ? 'destination-stop'
+                : flag === 2 || suspendedStations.length > 0
+                  ? 'partial'
+                  : flag !== 0 ||
+                      originStop.SuspendedFlag !== 0 ||
+                      destStop.SuspendedFlag !== 0
+                    ? 'unknown'
+                    : null;
     const status =
-        delay === undefined ? 'unknown' : delay > 0 ? 'delayed' : 'on-time';
+        suspension === 'full' ||
+        suspension === 'origin-stop' ||
+        suspension === 'destination-stop'
+            ? 'cancelled'
+            : suspension || delay === undefined
+              ? 'unknown'
+              : delay > 0
+                ? 'delayed'
+                : 'on-time';
 
     return {
         trainNo,
@@ -347,12 +375,14 @@ export function mapTrainToAppTrainInfo(
         direction: timetable.TrainInfo.Direction,
         originStation: originStop.StationName.Zh_tw,
         destinationStation: destStop.StationName.Zh_tw,
-        departureTime: originStop.DepartureTime,
-        arrivalTime: destStop.ArrivalTime,
+        departureTime: originStop.DepartureTime ?? '--:--',
+        arrivalTime: destStop.ArrivalTime ?? '--:--',
         tripLine: timetable.TrainInfo.TripLine ?? 0,
         price: getTrainPrice(timetable, routeFares),
         delay: delay || 0,
         status,
+        suspension,
+        suspendedStations,
     };
 }
 
