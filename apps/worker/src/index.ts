@@ -586,15 +586,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext) {
 
     try {
         if (url.pathname === '/api/stations') {
-            return handleStations(env);
+            return await handleStations(env);
         }
 
         if (url.pathname === '/api/schedule') {
-            return handleSchedule(request, url, env, ctx, requestId);
+            return await handleSchedule(request, url, env, ctx, requestId);
         }
 
         if (url.pathname === '/api/refresh') {
-            return handleRefresh(request, env, requestId);
+            return await handleRefresh(request, env, requestId);
         }
 
         return jsonError(
