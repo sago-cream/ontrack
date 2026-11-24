@@ -9,7 +9,7 @@ import {
     upsertSnapshot,
 } from './d1';
 import { MANUAL_LIVE_REFRESH_CLIENT_DAILY_LIMIT } from './policy';
-import { fetchTDX, fetchTDXWithCache } from './tdx';
+import { fetchTDX, fetchTDXWithCache, TDXServiceError } from './tdx';
 import {
     getLookbackIso,
     getNextTaipeiDate,
@@ -166,7 +166,14 @@ export async function refreshTimetable(env: Env, date = getTaipeiDate()) {
         tier: 'basic',
         caller: 'daily-timetable-refresh',
     });
-    const timetables = data.TrainTimetables ?? [];
+    const timetables = data.TrainTimetables;
+    if (!Array.isArray(timetables) || timetables.length === 0) {
+        throw new TDXServiceError(
+            'invalid-response',
+            null,
+            `TDX returned no national timetable for ${date}`
+        );
+    }
 
     await upsertSnapshot(env, timetableKey(date), timetables, null);
     return timetables;
@@ -469,7 +476,7 @@ export async function ensureTimetable(env: Env, date: string) {
         env,
         timetableKey(date)
     );
-    if (snapshot) {
+    if (snapshot && snapshot.data.length > 0) {
         return snapshot.data;
     }
 
@@ -521,7 +528,7 @@ export async function getCachedRouteTimetable(
         env,
         routeTimetableKey(date, origin, dest)
     );
-    if (routeSnapshot) {
+    if (routeSnapshot && routeSnapshot.data.length > 0) {
         return {
             timetables: routeSnapshot.data,
             cacheStatus: 'hit',
@@ -533,7 +540,18 @@ export async function getCachedRouteTimetable(
         env,
         timetableKey(date)
     );
-    if (dailySnapshot) {
+    if (dailySnapshot && dailySnapshot.data.length > 0) {
+        if (
+            routeSnapshot &&
+            Date.parse(routeSnapshot.fetched_at) >=
+                Date.parse(dailySnapshot.fetched_at)
+        ) {
+            return {
+                timetables: routeSnapshot.data,
+                cacheStatus: 'hit',
+                snapshotFetchedAt: routeSnapshot.fetched_at,
+            };
+        }
         return deriveRouteFromDailySnapshot(
             env,
             date,
