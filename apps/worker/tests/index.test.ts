@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 
 import worker from '../src/index';
+import { TDXServiceError } from '../src/tdx';
 import type { Env, Station } from '../src/types';
 
 const CATALOG_STATIONS: Station[] = [
@@ -220,6 +221,109 @@ describe('schedule API policy', () => {
         expect(state.execCalls).toBe(0);
         expect(waitUntilCalls).toHaveLength(0);
     });
+});
+
+describe('asynchronous API failures', () => {
+    const failures = [
+        {
+            error: new Error('private database details'),
+            code: 'service_unavailable',
+        },
+        {
+            error: new TDXServiceError(
+                'capacity',
+                429,
+                'private quota details'
+            ),
+            code: 'service_capacity',
+        },
+        {
+            error: new TDXServiceError(
+                'upstream',
+                502,
+                'private upstream details'
+            ),
+            code: 'upstream_unavailable',
+        },
+    ];
+
+    for (const path of [
+        '/api/stations',
+        '/api/schedule?origin=1000&dest=1020',
+        '/api/refresh',
+    ]) {
+        for (const { error, code } of failures) {
+            test(`${path} returns JSON for ${code}`, async () => {
+                const errorLog = spyOn(console, 'error').mockImplementation(
+                    () => {}
+                );
+                const upstream = spyOn(globalThis, 'fetch').mockRejectedValue(
+                    error
+                );
+                const db = {
+                    prepare() {
+                        return {
+                            bind() {
+                                return this;
+                            },
+                            async first() {
+                                throw error;
+                            },
+                        };
+                    },
+                    async batch() {
+                        throw error;
+                    },
+                } as unknown as D1Database;
+                const { ctx } = createContext();
+
+                try {
+                    const response = await worker.fetch(
+                        new Request(`https://ontrack.test${path}`, {
+                            headers: {
+                                'Origin': 'https://localhost',
+                                'X-Request-ID': 'failure-test',
+                                'Authorization': 'Bearer test-refresh-secret',
+                            },
+                        }),
+                        {
+                            ...createEnv(db),
+                            REFRESH_SECRET: 'test-refresh-secret',
+                        },
+                        ctx
+                    );
+
+                    expect(response.status).toBe(503);
+                    expect(response.headers.get('Content-Type')).toBe(
+                        'application/json; charset=utf-8'
+                    );
+                    expect(
+                        response.headers.get('Access-Control-Allow-Origin')
+                    ).toBe('https://localhost');
+                    expect(response.headers.get('X-Content-Type-Options')).toBe(
+                        'nosniff'
+                    );
+                    const body = await response.text();
+                    expect(JSON.parse(body).error).toMatchObject({
+                        code,
+                        requestId: 'failure-test',
+                    });
+                    expect(body).not.toContain(error.message);
+                    expect(errorLog).toHaveBeenCalledTimes(1);
+                    expect(
+                        JSON.parse(String(errorLog.mock.calls[0][0]))
+                    ).toMatchObject({
+                        event: 'worker_api_error',
+                        path: path.split('?')[0],
+                        requestId: 'failure-test',
+                    });
+                } finally {
+                    upstream.mockRestore();
+                    errorLog.mockRestore();
+                }
+            });
+        }
+    }
 });
 
 describe('Android API access', () => {
